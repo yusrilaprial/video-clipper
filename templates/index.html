@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video Clipper</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --fg:#e8eaf0; --mut:#8b93a7; --acc:#4f8cff; --err:#ff6b6b; --ok:#3ecf8e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--fg); display:flex; justify-content:center; padding:24px; }
+  .card { background:var(--card); border-radius:14px; padding:24px; width:100%; max-width:560px; }
+  h1 { margin:0 0 16px; font-size:1.3rem; }
+  label { display:block; font-size:.85rem; color:var(--mut); margin:14px 0 6px; }
+  input, select, button { width:100%; padding:11px 12px; border-radius:8px; border:1px solid #2a2f3a; background:#10131a; color:var(--fg); font-size:1rem; }
+  .row { display:flex; gap:12px; } .row > div { flex:1; }
+  button { background:var(--acc); border:none; font-weight:600; cursor:pointer; margin-top:18px; }
+  button.sec { background:#2a2f3a; margin-top:8px; }
+  button:disabled { opacity:.5; cursor:wait; }
+  .info { display:flex; gap:12px; margin-top:12px; align-items:center; font-size:.9rem; }
+  .info img { width:120px; border-radius:6px; }
+  .chk { display:flex; gap:8px; align-items:center; margin-top:14px; font-size:.9rem; color:var(--mut); }
+  .chk input { width:auto; }
+  #status { margin-top:16px; font-size:.95rem; min-height:1.2em; }
+  .err { color:var(--err); } .ok { color:var(--ok); }
+  a.dl { display:block; text-align:center; margin-top:10px; padding:11px; background:var(--ok); color:#06241a; border-radius:8px; font-weight:600; text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>✂️ Video Clipper</h1>
+  <label>Link video (YouTube dll.)</label>
+  <input id="url" placeholder="https://www.youtube.com/watch?v=...">
+  <button class="sec" id="btnInfo">Cek video</button>
+  <div id="info"></div>
+
+  <div class="row">
+    <div><label>Mulai (mm:ss / hh:mm:ss)</label><input id="start" placeholder="1:30"></div>
+    <div><label>Akhir</label><input id="end" placeholder="2:45"></div>
+  </div>
+  <label>Kualitas</label>
+  <select id="quality">
+    {% for q in qualities %}<option value="{{ q }}">{{ 'Hanya audio (mp3)' if q == 'audio' else ('Terbaik' if q == 'best' else q + 'p') }}</option>{% endfor %}
+  </select>
+  <label class="chk"><input type="checkbox" id="precise" checked> Potong presisi (render ulang titik potong, lebih lambat)</label>
+  <label class="chk"><input type="checkbox" id="test"> Mode uji: hanya 10 detik pertama (hemat kuota)</label>
+  <div id="liveNote" style="display:none;font-size:.85rem;color:var(--mut);margin-top:10px">Terdeteksi livestream: hanya segmen yang dibutuhkan yang diunduh. Waktu mengikuti timeline player (DVR harus aktif); hasil selalu dirender ulang.</div>
+  <button id="btnClip">Potong &amp; Render</button>
+  <div id="status"></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const post = (u, b) => fetch(u, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)}).then(async r => ({ok:r.ok, data:await r.json()}));
+const setStatus = (t, c='') => { $('status').className = c; $('status').innerHTML = t; };
+const fmt = s => { s=Math.round(s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0'); };
+
+$('btnInfo').onclick = async () => {
+  if (!$('url').value.trim()) return;
+  setStatus('Mengambil info...');
+  const {ok, data} = await post('/api/info', {url:$('url').value.trim()});
+  if (!ok) return setStatus(data.error, 'err');
+  $('info').innerHTML = `<div class="info">${data.thumbnail?`<img src="${data.thumbnail}">`:''}<div><b>${data.title}</b><br>${data.uploader||''} · ${data.duration?fmt(data.duration):''}${data.live_status==='is_live'?' · <span class="err">🔴 LIVE</span>':''}</div></div>`;
+  $('liveNote').style.display = (data.live_status==='is_live'||data.live_status==='post_live') ? 'block' : 'none';
+  setStatus('');
+};
+
+$('btnClip').onclick = async () => {
+  $('btnClip').disabled = true; setStatus('Memulai...');
+  const {ok, data} = await post('/api/clip', {
+    url:$('url').value.trim(), start:$('start').value, end:$('end').value,
+    quality:$('quality').value, precise:$('precise').checked, test:$('test').checked });
+  if (!ok) { $('btnClip').disabled = false; return setStatus(data.error, 'err'); }
+  const timer = setInterval(async () => {
+    const j = await (await fetch('/api/job/' + data.job_id)).json();
+    if (j.status === 'running') setStatus('⏳ ' + (j.progress || '...'));
+    else { clearInterval(timer); $('btnClip').disabled = false;
+      if (j.status === 'done') setStatus(`<span class="ok">Selesai: ${j.name}</span><a class="dl" href="/download/${data.job_id}">Unduh hasil</a>`);
+      else setStatus(j.error, 'err'); }
+  }, 1000);
+};
+</script>
+</body>
+</html>
