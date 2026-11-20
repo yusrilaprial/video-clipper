@@ -47,10 +47,8 @@ def _run(job_id: str, p: dict) -> None:
 def api_clip():
     d = request.json or {}
     try:
-        from clipper import parse_time
-        s, e = parse_time(d["start"]), parse_time(d["end"])
-        if e <= s:
-            raise ValueError("Waktu akhir harus lebih besar dari waktu mulai")
+        from clipper import resolve_range
+        resolve_range(d["start"], d["end"])
         if d.get("quality", "best") not in QUALITIES:
             raise ValueError("Kualitas tidak valid")
     except (KeyError, ValueError) as ex:

@@ -34,8 +34,8 @@
   <div id="info"></div>
 
   <div class="row">
-    <div><label>Mulai (mm:ss / hh:mm:ss)</label><input id="start" placeholder="1:30"></div>
-    <div><label>Akhir</label><input id="end" placeholder="2:45"></div>
+    <div><label>Mulai (mm:ss / hh:mm:ss)</label><input id="start" placeholder="1:30  (live: -1:30)"></div>
+    <div><label>Akhir</label><input id="end" placeholder="2:45  (live: 0:00)"></div>
   </div>
   <label>Kualitas</label>
   <select id="quality">
@@ -43,7 +43,7 @@
   </select>
   <label class="chk"><input type="checkbox" id="precise" checked> Potong presisi (render ulang titik potong, lebih lambat)</label>
   <label class="chk"><input type="checkbox" id="test"> Mode uji: hanya 10 detik pertama (hemat kuota)</label>
-  <div id="liveNote" style="display:none;font-size:.85rem;color:var(--mut);margin-top:10px">Terdeteksi livestream: hanya segmen yang dibutuhkan yang diunduh. Waktu mengikuti timeline player (DVR harus aktif); hasil selalu dirender ulang.</div>
+  <div id="liveNote" style="display:none;font-size:.85rem;color:var(--mut);margin-top:10px">Terdeteksi livestream: hanya segmen yang dibutuhkan yang diunduh. Waktu mengikuti timeline player (DVR harus aktif), atau relatif ke sekarang: mulai <b>-1:30</b>, akhir <b>0:00</b>. Hasil selalu dirender ulang.</div>
   <button id="btnClip">Potong &amp; Render</button>
   <div id="status"></div>
 </div>

@@ -19,13 +19,29 @@ def progress(d):
         print(f"\r  Unduhan selesai{extra}, memproses/render...      ")
 
 
+def _fix_negative_args(argv):
+    """argparse menganggap '-1:30' sebagai opsi; ubah '-s -1:30' menjadi '-s=-1:30'."""
+    out, i = [], 0
+    while i < len(argv):
+        t = argv[i]
+        if t in ("-s", "--start", "-e", "--end", "--clip") and i + 1 < len(argv) and argv[i + 1].startswith("-"):
+            out.append(f"{t}={argv[i + 1]}")
+            i += 2
+        else:
+            out.append(t)
+            i += 1
+    return out
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Potong video dari link YouTube dan langsung render.")
     p.add_argument("url")
-    p.add_argument("-s", "--start", help="Waktu mulai, mis. 1:30 / 00:01:30 / 90 / 1m30s")
-    p.add_argument("-e", "--end", help="Waktu akhir")
+    p.add_argument("-s", "--start", help="Waktu mulai, mis. 1:30 / 00:01:30 / 90 / 1m30s. "
+                   "Livestream: '-1:30' = 1 mnt 30 dtk yang lalu")
+    p.add_argument("-e", "--end", help="Waktu akhir. Livestream: '0:00' atau 'now' = sekarang")
     p.add_argument("--clip", action="append", metavar="MULAI-AKHIR",
-                   help="Klip tambahan format 'mulai-akhir' (boleh diulang), mis. 0:10-0:40")
+                   help="Klip tambahan 'mulai-akhir' (boleh diulang), mis. 0:10-0:40; "
+                   "untuk waktu relatif pakai '..', mis. -1:30..0:00")
     p.add_argument("-q", "--quality", default="best", choices=list(QUALITIES))
     p.add_argument("-o", "--output", default="output", help="Folder hasil (default: output)")
     p.add_argument("--fast", action="store_true", help="Potong di keyframe (cepat, kurang presisi; hanya mode vod)")
@@ -33,15 +49,18 @@ def main() -> int:
                    help="auto = deteksi livestream otomatis (default)")
     p.add_argument("--test", action="store_true",
                    help="Uji: hanya 10 detik pertama dari rentang (hemat kuota)")
-    a = p.parse_args()
+    a = p.parse_args(_fix_negative_args(sys.argv[1:]))
 
     ranges = []
     if a.start and a.end:
         ranges.append((a.start, a.end))
     for c in a.clip or []:
-        if "-" not in c:
-            p.error(f"Format --clip salah: {c}")
-        s, e = c.rsplit("-", 1)
+        if ".." in c:
+            s, e = c.split("..", 1)
+        elif "-" in c and not c.startswith("-"):
+            s, e = c.rsplit("-", 1)
+        else:
+            p.error(f"Format --clip salah: {c} (pakai mulai-akhir, atau mulai..akhir untuk waktu relatif)")
         ranges.append((s, e))
     if not ranges:
         p.error("Isi -s dan -e, atau gunakan --clip mulai-akhir")

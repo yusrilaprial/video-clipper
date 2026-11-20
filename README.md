@@ -47,9 +47,16 @@ waktu mulai/akhir dipetakan ke nomor segmen YouTube (`sq=N`), lalu hanya segmen 
 
 ```bash
 python cli.py "https://www.youtube.com/watch?v=LIVE_ID" -s 1:20:00 -e 1:21:30      # klip 1.5 menit dari stream yang masih live
+python cli.py "LINK_LIVE" -s -1:30 -e 0:00                                        # 1 mnt 30 dtk terakhir sampai sekarang
+python cli.py "LINK_LIVE" -s -5:00 -e -4:00                                       # 5 mnt lalu sampai 4 mnt lalu
+python cli.py "LINK_LIVE" --clip -10:00..-9:00 --clip -2:00..0:00                 # beberapa klip relatif
 python cli.py "LINK_LIVE" -s 1:20:00 -e 1:21:30 --test                            # uji dulu: hanya 10 detik (hemat kuota)
 python cli.py "LINK_LIVE" -s 1:20:00 -e 1:21:30 --mode live -q 720
 ```
+
+Waktu relatif (khusus live): awalan `-` berarti "sekian yang lalu", dan `0:00` / `now` berarti sekarang.
+Keduanya harus relatif atau keduanya absolut. "Sekarang" = akhir segmen lengkap terakhir, yaitu sekitar 2-5 detik
+sebelum posisi live paling ujung (segmen terakhir belum selesai ditulis YouTube).
 
 Syarat & batasan:
 - DVR stream harus aktif (di player bisa digeser mundur). Tanpa DVR, bagian lampau memang tidak tersedia.

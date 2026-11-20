@@ -20,13 +20,24 @@ QUALITIES = {
 _TIME_RE = re.compile(r"^\d+(\.\d+)?$")
 
 
+def is_relative(value) -> bool:
+    """True untuk waktu relatif terhadap live edge: '-1:30', '-90', 'now'."""
+    s = str(value).strip().lower()
+    return s.startswith("-") or s in ("now", "live", "sekarang")
+
+
 def parse_time(value: str | float | int) -> float:
-    """Ubah '90', '1:30', '01:02:03', '1:30.5', '1h2m3s' menjadi detik."""
+    """Ubah '90', '1:30', '01:02:03', '1:30.5', '1h2m3s' menjadi detik.
+    Awalan '-' menghasilkan nilai negatif (relatif ke live edge); 'now' = 0."""
     if isinstance(value, (int, float)):
         return float(value)
     s = str(value).strip().lower()
     if not s:
         raise ValueError("Waktu kosong")
+    if s in ("now", "live", "sekarang"):
+        return 0.0
+    if s.startswith("-"):
+        return -parse_time(s[1:])
 
     m = re.fullmatch(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s?)?", s)
     if m and any(m.groups()) and any(c in s for c in "hms"):
@@ -40,6 +51,23 @@ def parse_time(value: str | float | int) -> float:
     for p in parts:
         seconds = seconds * 60 + float(p)
     return seconds
+
+
+def resolve_range(start, end) -> tuple[float, float, bool]:
+    """Return (t0, t1, relative). Jika relatif, t0/t1 adalah offset (<= 0) dari live edge; 0 = sekarang."""
+    rs, re_ = is_relative(start), is_relative(end)
+    t0, t1 = parse_time(start), parse_time(end)
+    relative = rs or re_
+    if relative and ((not rs and t0 != 0) or (not re_ and t1 != 0)):
+        raise ValueError("Pakai waktu relatif untuk keduanya (mis. mulai -1:30, akhir 0:00), "
+                         "atau waktu absolut untuk keduanya.")
+    if relative and (t0 > 0 or t1 > 0):
+        raise ValueError("Waktu relatif harus negatif atau 0 (mis. -1:30).")
+    if t1 <= t0:
+        raise ValueError("Waktu akhir harus lebih besar dari waktu mulai")
+    if not relative and t0 < 0:
+        raise ValueError("Waktu mulai tidak boleh negatif")
+    return t0, t1, relative
 
 
 def format_time(seconds: float) -> str:
@@ -92,9 +120,9 @@ def clip(
     precise=True  -> potongan presisi ke detik (re-encode di titik potong, sedikit lebih lama).
     precise=False -> potong di keyframe terdekat (sangat cepat, bisa meleset beberapa detik).
     """
-    t0, t1 = parse_time(start), parse_time(end)
-    if t0 < 0 or t1 <= t0:
-        raise ValueError("Waktu akhir harus lebih besar dari waktu mulai")
+    if is_relative(start) or is_relative(end):
+        raise ValueError("Waktu relatif (-mm:ss / now) hanya untuk livestream yang sedang berjalan.")
+    t0, t1, _ = resolve_range(start, end)
     if quality not in QUALITIES:
         raise ValueError(f"Kualitas tidak dikenal: {quality}. Pilih: {', '.join(QUALITIES)}")
 
@@ -170,6 +198,8 @@ def clip_auto(
     if mode == "live":
         from live_clip import clip_live
         return clip_live(url, start, end, output_dir, quality, filename, progress, test=test)
+    if is_relative(start) or is_relative(end):
+        raise ValueError("Waktu relatif (-mm:ss / now) hanya untuk livestream yang sedang berjalan.")
     if test:
         end = min(parse_time(end), parse_time(start) + 10)
     return clip(url, start, end, output_dir, quality, precise, filename, progress)

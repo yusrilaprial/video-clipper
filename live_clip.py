@@ -23,7 +23,7 @@ from typing import Callable, Optional
 import yt_dlp
 from yt_dlp.utils import sanitize_filename, update_url_query
 
-from clipper import QUALITIES, format_time, parse_time
+from clipper import QUALITIES, format_time, resolve_range
 
 
 class LiveClipError(Exception):
@@ -122,11 +122,14 @@ def _init_part(seg0: bytes) -> bytes:
 
 
 # --------------------------------------------------------------------------- planning
-def _plan(fmt: dict, t0: float, t1: float, margin: int = 1) -> dict:
+def _head(fmt: dict) -> dict:
     headers = _headers(fmt)
-    base = fmt["url"]
-    d = float(fmt["target_duration"])
-    last = head_seq(base, headers)
+    return {"base": fmt["url"], "headers": headers, "d": float(fmt["target_duration"]),
+            "last": head_seq(fmt["url"], headers)}
+
+
+def _plan(h: dict, t0: float, t1: float, margin: int = 1) -> dict:
+    d, last = h["d"], h["last"]
     safe_last = last - 1  # segmen paling ujung bisa belum lengkap
     stream_len = last * d
     a_core = int(t0 // d)
@@ -137,7 +140,7 @@ def _plan(fmt: dict, t0: float, t1: float, margin: int = 1) -> dict:
             f"Panjang stream saat ini sekitar {format_time(stream_len)}."
         )
     return {
-        "base": base, "headers": headers, "d": d,
+        "base": h["base"], "headers": h["headers"], "d": d,
         "a": max(0, a_core - margin), "b": min(b_core + margin, safe_last),
         "stream_len": stream_len,
     }
@@ -222,17 +225,26 @@ def extract_live(url: str) -> tuple[dict, list[dict]]:
 def clip_from_formats(
     title: str, vfmt: Optional[dict], afmt: dict, start, end,
     output_dir="output", filename: Optional[str] = None,
-    progress: Optional[Callable[[dict], None]] = None, workers: int = 4,
+    progress: Optional[Callable[[dict], None]] = None, workers: int = 4, test: bool = False,
 ) -> Path:
-    t0, t1 = parse_time(start), parse_time(end)
-    if t0 < 0 or t1 <= t0:
-        raise ValueError("Waktu akhir harus lebih besar dari waktu mulai")
-    length = t1 - t0
+    """start/end: absolut (detik dari awal stream, mis. '1:20:00') atau relatif ke live edge
+    ('-1:30' = 1 mnt 30 dtk lalu, '0:00' = sekarang)."""
+    t0, t1, relative = resolve_range(start, end)
     audio_only = vfmt is None
 
-    plans = {"a": _plan(afmt, t0, t1)}
+    heads = {"a": _head(afmt)}
     if vfmt:
-        plans["v"] = _plan(vfmt, t0, t1)
+        heads["v"] = _head(vfmt)
+    edge = min(h["last"] * h["d"] for h in heads.values())  # akhir segmen lengkap terakhir = "sekarang"
+    if relative:
+        t0, t1 = edge + t0, edge + t1
+        if t0 < 0:
+            raise LiveClipError(f"Waktu mulai melewati awal stream. Panjang stream saat ini sekitar {format_time(edge)}.")
+    if test:
+        t1 = min(t1, t0 + 10)
+    length = t1 - t0
+
+    plans = {k: _plan(h, t0, t1) for k, h in heads.items()}
 
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -289,12 +301,10 @@ def clip_live(
     filename: Optional[str] = None, progress: Optional[Callable[[dict], None]] = None,
     test: bool = False, workers: int = 4,
 ) -> Path:
-    t0, t1 = parse_time(start), parse_time(end)
+    resolve_range(start, end)  # validasi cepat sebelum menghubungi YouTube
     if quality not in QUALITIES:
         raise ValueError(f"Kualitas tidak dikenal: {quality}")
-    if test:
-        t1 = min(t1, t0 + 10)
     info, fmts = extract_live(url)
     vfmt, afmt = _pick(fmts, quality)
-    return clip_from_formats(info.get("title") or "live", vfmt, afmt, t0, t1,
-                             output_dir, filename, progress, workers)
+    return clip_from_formats(info.get("title") or "live", vfmt, afmt, start, end,
+                             output_dir, filename, progress, workers, test)

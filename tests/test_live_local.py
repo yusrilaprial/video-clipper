@@ -168,6 +168,22 @@ def main():
         ok &= check("timeline bergeser: nada ~4.5s", ts5 is not None and abs(ts5 - 4.5) < 0.25, f"{ts5}")
         srv2.shutdown()
 
+        # 3c) waktu relatif ke live edge: "-0:10" .. "0:00" (edge simulasi = 59*2 = 118 dtk)
+        out6 = clip_from_formats("uji", vf, af, "-0:10", "0:00", tmp / "o6")
+        ok &= check("relatif -0:10..0:00 durasi 10 dtk", abs(duration(out6) - 10) < 0.3, f"{duration(out6):.2f}s")
+        l6, w6 = luma_at(out6, 0.1), want(255 * ((108.1) % 20) / 20)
+        ok &= check("relatif: frame awal = detik 108", abs(l6 - w6) < 8, f"luma={l6:.0f} (target ~{w6:.0f})")
+        out7 = clip_from_formats("uji", vf, af, "-0:30", "-0:20", tmp / "o7")
+        l7, w7 = luma_at(out7, 0.1), want(255 * ((88.1) % 20) / 20)
+        ok &= check("relatif -0:30..-0:20 frame awal = detik 88", abs(l7 - w7) < 8, f"luma={l7:.0f} (target ~{w7:.0f})")
+        for label, a, b, exc in [("relatif melewati awal stream", "-5:00", "0:00", LiveClipError),
+                                 ("campuran relatif+absolut ditolak", "-0:10", "1:00", ValueError)]:
+            try:
+                clip_from_formats("uji", vf, af, a, b, tmp / "ox")
+                ok &= check(label, False)
+            except exc as e:
+                ok &= check(label, True, str(e))
+
         # 4) melewati live edge
         try:
             clip_from_formats("uji", vf, af, 100, 500, tmp / "o4")
