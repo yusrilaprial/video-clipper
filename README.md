@@ -169,3 +169,6 @@ Uji offline tanpa internet (butuh ffmpeg): `python tests/test_live_local.py` (mo
 - Jika YouTube meminta login/anti-bot, isi `CLIPPER_COOKIES_FROM_BROWSER=chrome` (atau `CLIPPER_COOKIES_FILE`) di `.env`.
 - Perbarui yt-dlp secara berkala: `pip install -U yt-dlp` (YouTube sering berubah).
 - Gunakan hanya untuk konten yang kamu punya hak/izin memakainya.
+
+## Lisensi
+Proyek ini menggunakan lisensi [MIT](LICENSE).
