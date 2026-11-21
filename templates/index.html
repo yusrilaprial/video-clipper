@@ -37,11 +37,41 @@
     <div><label>Mulai (mm:ss / hh:mm:ss)</label><input id="start" placeholder="1:30  (live: -1:30)"></div>
     <div><label>Akhir</label><input id="end" placeholder="2:45  (live: 0:00)"></div>
   </div>
+  <div class="row">
+    <div><label>Frame</label>
+      <select id="frame">
+        {% for f in frames %}<option value="{{ f }}"{{ ' selected' if f == default_frame else '' }}>{{ {'original':'Original','tiktok':'TikTok (9:16)','reels':'Instagram Reels (9:16)','shorts':'YouTube Shorts (9:16)','instagram':'Instagram feed (4:5)','square':'Persegi (1:1)','youtube':'YouTube (16:9)','twitter':'X / Twitter (16:9)','cinema':'Sinema (21:9)'}[f] }}</option>{% endfor %}
+        <option value="custom"{{ ' selected' if default_frame == 'custom' else '' }}>Kustom...</option>
+      </select></div>
+    <div><label>Isi frame</label>
+      <select id="fit">
+        <option value="blur"{{ ' selected' if default_fit == 'blur' else '' }}>Latar buram</option>
+        <option value="crop"{{ ' selected' if default_fit == 'crop' else '' }}>Potong tengah</option>
+        <option value="pad"{{ ' selected' if default_fit == 'pad' else '' }}>Bingkai hitam</option>
+      </select></div>
+  </div>
+  <input id="customFrame" placeholder="mis. 3:4 atau 720x1280" value="{{ custom_frame if default_frame == 'custom' else '' }}" style="display:{{ 'block' if default_frame == 'custom' else 'none' }};margin-top:8px">
+  <div class="row">
+    <div><label>Subtitle</label>
+      <select id="subs">
+        <option value="off"{{ ' selected' if default_subs == 'off' else '' }}>Tanpa subtitle</option>
+        <option value="auto"{{ ' selected' if default_subs == 'auto' else '' }}>Otomatis (caption YouTube / AI)</option>
+        <option value="youtube"{{ ' selected' if default_subs == 'youtube' else '' }}>Caption YouTube saja</option>
+        <option value="whisper"{{ ' selected' if default_subs == 'whisper' else '' }}>Transkripsi AI (Whisper)</option>
+      </select></div>
+    <div><label>Bahasa subtitle</label><input id="subLang" value="{{ default_sub_lang }}" placeholder="auto / id / en"></div>
+  </div>
+  <label>Jenis subtitle</label>
+  <select id="subMode">
+    <option value="burn"{{ ' selected' if default_sub_mode == 'burn' else '' }}>Tertanam di video</option>
+    <option value="soft"{{ ' selected' if default_sub_mode == 'soft' else '' }}>Track terpisah (bisa dimatikan)</option>
+    <option value="srt"{{ ' selected' if default_sub_mode == 'srt' else '' }}>File .srt terpisah</option>
+  </select>
   <label>Kualitas</label>
   <select id="quality">
-    {% for q in qualities %}<option value="{{ q }}">{{ 'Hanya audio (mp3)' if q == 'audio' else ('Terbaik' if q == 'best' else q + 'p') }}</option>{% endfor %}
+    {% for q in qualities %}<option value="{{ q }}"{{ ' selected' if q == default_quality else '' }}>{{ 'Hanya audio (mp3)' if q == 'audio' else ('Terbaik' if q == 'best' else q + 'p') }}</option>{% endfor %}
   </select>
-  <label class="chk"><input type="checkbox" id="precise" checked> Potong presisi (render ulang titik potong, lebih lambat)</label>
+  <label class="chk"><input type="checkbox" id="precise"{{ " checked" if default_precise else "" }}> Potong presisi (render ulang titik potong, lebih lambat)</label>
   <label class="chk"><input type="checkbox" id="test"> Mode uji: hanya 10 detik pertama (hemat kuota)</label>
   <div id="liveNote" style="display:none;font-size:.85rem;color:var(--mut);margin-top:10px">Terdeteksi livestream: hanya segmen yang dibutuhkan yang diunduh. Waktu mengikuti timeline player (DVR harus aktif), atau relatif ke sekarang: mulai <b>-1:30</b>, akhir <b>0:00</b>. Hasil selalu dirender ulang.</div>
   <button id="btnClip">Potong &amp; Render</button>
@@ -53,6 +83,7 @@ const post = (u, b) => fetch(u, {method:'POST', headers:{'Content-Type':'applica
 const setStatus = (t, c='') => { $('status').className = c; $('status').innerHTML = t; };
 const fmt = s => { s=Math.round(s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0'); };
 
+$('frame').onchange = () => { $('customFrame').style.display = $('frame').value === 'custom' ? 'block' : 'none'; };
 $('btnInfo').onclick = async () => {
   if (!$('url').value.trim()) return;
   setStatus('Mengambil info...');
@@ -67,14 +98,18 @@ $('btnClip').onclick = async () => {
   $('btnClip').disabled = true; setStatus('Memulai...');
   const {ok, data} = await post('/api/clip', {
     url:$('url').value.trim(), start:$('start').value, end:$('end').value,
-    quality:$('quality').value, precise:$('precise').checked, test:$('test').checked });
+    quality:$('quality').value, precise:$('precise').checked, test:$('test').checked,
+    frame: $('frame').value === 'custom' ? $('customFrame').value.trim() : $('frame').value,
+    fit:$('fit').value, subs:$('subs').value, sub_lang:$('subLang').value.trim() || 'auto', sub_mode:$('subMode').value });
   if (!ok) { $('btnClip').disabled = false; return setStatus(data.error, 'err'); }
   const timer = setInterval(async () => {
     const j = await (await fetch('/api/job/' + data.job_id)).json();
-    if (j.status === 'running') setStatus('⏳ ' + (j.progress || '...'));
+    const notes = (j.notes||[]).map(n => `<div class="${n.level==='warning'?'err':''}" style="font-size:.85rem">${n.level==='warning'?'⚠️':'ℹ️'} ${n.text}</div>`).join('');
+    if (j.status === 'queued' || j.status === 'running') setStatus('⏳ ' + (j.progress || '...') + notes);
     else { clearInterval(timer); $('btnClip').disabled = false;
-      if (j.status === 'done') setStatus(`<span class="ok">Selesai: ${j.name}</span><a class="dl" href="/download/${data.job_id}">Unduh hasil</a>`);
-      else setStatus(j.error, 'err'); }
+      if (j.status === 'done') setStatus(`<span class="ok">Selesai: ${j.name}</span>${notes}<a class="dl" href="/download/${data.job_id}">Unduh hasil</a>` +
+        (j.has_srt ? `<a class="dl" style="background:#4f8cff;color:#fff" href="/download/${data.job_id}/srt">Unduh subtitle (.srt)</a>` : ''));
+      else setStatus(j.error + notes, 'err'); }
   }, 1000);
 };
 </script>

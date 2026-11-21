@@ -1,0 +1,2 @@
+# Untuk deployment server (Linux/Docker). Tidak diperlukan untuk pemakaian lokal.
+gunicorn>=22.0

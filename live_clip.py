@@ -23,7 +23,10 @@ from typing import Callable, Optional
 import yt_dlp
 from yt_dlp.utils import sanitize_filename, update_url_query
 
-from clipper import QUALITIES, format_time, resolve_range
+import config
+import render
+import subtitles
+from clipper import QUALITIES, format_time, resolve_look, resolve_range, ydl_base_opts
 
 
 class LiveClipError(Exception):
@@ -38,12 +41,24 @@ def _headers(fmt: dict) -> dict:
     return h
 
 
-def _request(url: str, headers: dict, method: str = "GET", retries: int = 4, timeout: int = 30):
+def _opener() -> urllib.request.OpenerDirector:
+    proxy = config.get().proxy
+    if proxy:
+        return urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+    return urllib.request.build_opener()
+
+
+def _request(url: str, headers: dict, method: str = "GET", retries: Optional[int] = None,
+             timeout: Optional[int] = None):
+    cfg = config.get()
+    retries = cfg.live_retries if retries is None else retries
+    timeout = cfg.http_timeout if timeout is None else timeout
+    opener = _opener()
     last: Exception | None = None
     for attempt in range(retries):
         try:
             req = urllib.request.Request(url, headers=headers, method=method)
-            with urllib.request.urlopen(req, timeout=timeout) as r:
+            with opener.open(req, timeout=timeout) as r:
                 body = r.read() if method == "GET" else b""
                 return body, r.headers
         except urllib.error.HTTPError as e:
@@ -128,7 +143,8 @@ def _head(fmt: dict) -> dict:
             "last": head_seq(fmt["url"], headers)}
 
 
-def _plan(h: dict, t0: float, t1: float, margin: int = 1) -> dict:
+def _plan(h: dict, t0: float, t1: float, margin: Optional[int] = None) -> dict:
+    margin = config.get().live_margin if margin is None else margin
     d, last = h["d"], h["last"]
     safe_last = last - 1  # segmen paling ujung bisa belum lengkap
     stream_len = last * d
@@ -165,9 +181,13 @@ def _count(p: dict) -> int:
 
 
 def _first_pts(path: Path, stream: str) -> Optional[float]:
-    cmd = ["ffprobe", "-v", "error", "-select_streams", stream, "-read_intervals", "%+#60",
+    cmd = [config.get().ffprobe, "-v", "error", "-select_streams", stream, "-read_intervals", "%+#60",
            "-show_entries", "packet=pts_time", "-of", "csv=p=0", str(path)]
-    out = subprocess.run(cmd, capture_output=True, text=True).stdout
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True).stdout
+    except FileNotFoundError:
+        raise LiveClipError(f"ffprobe tidak ditemukan ({cmd[0]}). Pasang ffmpeg atau atur CLIPPER_FFPROBE_PATH / "
+                            "CLIPPER_FFMPEG_PATH.") from None
     vals = []
     for tok in out.split():
         try:
@@ -203,8 +223,7 @@ def _pick(fmts: list[dict], quality: str):
 
 
 def extract_live(url: str) -> tuple[dict, list[dict]]:
-    opts = {"quiet": True, "no_warnings": True, "skip_download": True,
-            "noplaylist": True, "live_from_start": True}
+    opts = {**ydl_base_opts(), "skip_download": True, "live_from_start": True}
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -224,13 +243,20 @@ def extract_live(url: str) -> tuple[dict, list[dict]]:
 # --------------------------------------------------------------------------- main
 def clip_from_formats(
     title: str, vfmt: Optional[dict], afmt: dict, start, end,
-    output_dir="output", filename: Optional[str] = None,
-    progress: Optional[Callable[[dict], None]] = None, workers: int = 4, test: bool = False,
+    output_dir=None, filename: Optional[str] = None,
+    progress: Optional[Callable[[dict], None]] = None, workers: Optional[int] = None, test: bool = False,
+    look: Optional[dict] = None, info: Optional[dict] = None,
 ) -> Path:
     """start/end: absolut (detik dari awal stream, mis. '1:20:00') atau relatif ke live edge
     ('-1:30' = 1 mnt 30 dtk lalu, '0:00' = sekarang)."""
+    cfg = config.get()
+    workers = cfg.live_workers if workers is None else workers
+    output_dir = cfg.output_dir if output_dir is None else output_dir
     t0, t1, relative = resolve_range(start, end)
     audio_only = vfmt is None
+    look = resolve_look(look)
+    size = None if audio_only else render.resolve_frame(look["frame"])
+    sub_mode = "srt" if audio_only else look["sub_mode"]
 
     heads = {"a": _head(afmt)}
     if vfmt:
@@ -241,7 +267,7 @@ def clip_from_formats(
         if t0 < 0:
             raise LiveClipError(f"Waktu mulai melewati awal stream. Panjang stream saat ini sekitar {format_time(edge)}.")
     if test:
-        t1 = min(t1, t0 + 10)
+        t1 = min(t1, t0 + cfg.test_seconds)
     length = t1 - t0
 
     plans = {k: _plan(h, t0, t1) for k, h in heads.items()}
@@ -249,8 +275,9 @@ def clip_from_formats(
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     name = filename or sanitize_filename(
-        f"{title[:80]} [live {format_time(t0).replace(':', '-')} - {format_time(t1).replace(':', '-')}]")
-    out_path = out_dir / f"{name}.{'mp3' if audio_only else 'mp4'}"
+        f"{title[:cfg.title_max]} [live {format_time(t0).replace(':', '-')} - {format_time(t1).replace(':', '-')}]")
+    tag = f" [{render.frame_tag(look['frame'])}]" if size else ""
+    out_path = (out_dir / f"{name}{tag}.{'mp3' if audio_only else 'mp4'}").resolve()
 
     tracker = _Tracker(progress, sum(_count(p) for p in plans.values()))
     with tempfile.TemporaryDirectory(prefix="vclip_") as tmp_s:
@@ -273,38 +300,65 @@ def clip_from_formats(
             T0 = t0
         T1 = T0 + length  # video & audio memakai timeline yang sama
 
-        cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-copyts"]
+        cues: list = []
+        if look["subs"] != "off":
+            cues = subtitles.collect_cues(
+                look["subs"], look["sub_lang"], info, t0, t1,
+                lambda: render.extract_wav(files["a"], tmp / "a.wav", T0, T1), progress)
+        src_wh = None if audio_only else render.probe_size(files["v"])
+        out_wh = size or src_wh or (1080, 1920)
+        cues = render.prepare_cues(cues, out_wh, cfg.sub_scale) if cues else []
+        if cues and sub_mode == "srt":
+            out_path.with_suffix(".srt").write_text(subtitles.to_srt(cues), encoding="utf-8")
+        burn = bool(cues) and sub_mode == "burn"
+        soft = bool(cues) and sub_mode == "soft"
+        if burn:
+            (tmp / "subs.ass").write_text(render.to_ass(cues, out_wh, cfg.sub_scale, cfg.sub_font), encoding="utf-8")
+
+        cmd = [cfg.ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-copyts"]
         fc, maps = [], []
+        n_in = 0
         if vfmt:
             cmd += ["-i", str(files["v"])]
-            fc.append(f"[0:v:0]trim=start={T0:.3f}:end={T1:.3f},setpts=PTS-STARTPTS[v]")
+            fc.append(f"[0:v:0]trim=start={T0:.3f}:end={T1:.3f},setpts=PTS-STARTPTS[vtrim]")
+            fc.append(render.video_graph("vtrim", "v", size, look["fit"], look["focus"],
+                                         "subs.ass" if burn else None))
             maps += ["-map", "[v]"]
+            n_in += 1
         cmd += ["-i", str(files["a"])]
-        ai = 1 if vfmt else 0
-        fc.append(f"[{ai}:a:0]atrim=start={T0:.3f}:end={T1:.3f},asetpts=PTS-STARTPTS[a]")
+        fc.append(f"[{n_in}:a:0]atrim=start={T0:.3f}:end={T1:.3f},asetpts=PTS-STARTPTS[a]")
         maps += ["-map", "[a]"]
+        n_in += 1
+        if soft:
+            (tmp / "subs.srt").write_text(subtitles.to_srt(cues), encoding="utf-8")
+            cmd += ["-i", str(tmp / "subs.srt")]
+            maps += ["-map", f"{n_in}:0"]
         cmd += ["-filter_complex", ";".join(fc)] + maps
-        if audio_only:
-            cmd += ["-c:a", "libmp3lame", "-b:a", "192k"]
-        else:
-            cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
-                    "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"]
+        cmd += render.encode_args(audio_only)
+        if soft:
+            cmd += ["-c:s", "mov_text"]
         cmd.append(str(out_path))
-        r = subprocess.run(cmd, capture_output=True, text=True)
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, cwd=tmp)
+        except FileNotFoundError:
+            raise LiveClipError(f"ffmpeg tidak ditemukan ({cfg.ffmpeg}). Pasang ffmpeg atau atur "
+                                "CLIPPER_FFMPEG_PATH.") from None
         if r.returncode != 0:
             raise LiveClipError(f"ffmpeg gagal: {r.stderr.strip()[-500:]}")
     return out_path
 
 
 def clip_live(
-    url: str, start, end, output_dir="output", quality: str = "best",
+    url: str, start, end, output_dir=None, quality: Optional[str] = None,
     filename: Optional[str] = None, progress: Optional[Callable[[dict], None]] = None,
-    test: bool = False, workers: int = 4,
+    test: bool = False, workers: Optional[int] = None, look: Optional[dict] = None,
 ) -> Path:
+    quality = config.get().quality if quality is None else quality
     resolve_range(start, end)  # validasi cepat sebelum menghubungi YouTube
     if quality not in QUALITIES:
         raise ValueError(f"Kualitas tidak dikenal: {quality}")
     info, fmts = extract_live(url)
     vfmt, afmt = _pick(fmts, quality)
+    look = resolve_look(look)  # validasi sebelum mengunduh
     return clip_from_formats(info.get("title") or "live", vfmt, afmt, start, end,
-                             output_dir, filename, progress, workers, test)
+                             output_dir, filename, progress, workers, test, look, info)

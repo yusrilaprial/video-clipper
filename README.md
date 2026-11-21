@@ -19,6 +19,41 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+## Konfigurasi (.env / environment variable)
+
+Salin `.env.example` menjadi `.env`, lalu hapus tanda `#` pada baris yang ingin diubah. Environment variable asli
+(`export` / `set`) selalu menang atas `.env`. Nilai yang salah ditolak saat start dengan pesan yang jelas.
+Cek hasil akhirnya dengan `python cli.py --show-config`.
+
+| Variabel | Bawaan | Fungsi |
+|---|---|---|
+| `CLIPPER_OUTPUT_DIR` | `output` | Folder hasil klip |
+| `CLIPPER_QUALITY` | `best` | `best`, `1080`, `720`, `480`, `360`, `audio` (mp3) |
+| `CLIPPER_MODE` | `auto` | `auto` (deteksi live), `live`, `vod` |
+| `CLIPPER_PRECISE` | `true` | Potong presisi pada video biasa (`false` = cepat, bisa meleset) |
+| `CLIPPER_TEST_SECONDS` | `10` | Lama klip pada `--test` |
+| `CLIPPER_TITLE_MAX` | `80` | Panjang maksimal judul di nama file |
+| `CLIPPER_FFMPEG_PATH` / `CLIPPER_FFPROBE_PATH` | dari PATH | Folder atau path ffmpeg jika tidak ada di PATH |
+| `CLIPPER_PROXY` | kosong | Proxy untuk yt-dlp dan unduhan segmen live |
+| `CLIPPER_COOKIES_FILE` / `CLIPPER_COOKIES_FROM_BROWSER` | kosong | Cookies untuk video yang meminta login (`chrome`, `firefox:PROFIL`, dst.) |
+| `CLIPPER_FRAME` / `CLIPPER_FIT` / `CLIPPER_FOCUS` | `original` / `blur` / `0.5` | Frame hasil, cara mengisi frame, posisi potongan |
+| `CLIPPER_SUBS` / `CLIPPER_SUB_LANG` / `CLIPPER_SUB_MODE` | `off` / `auto` / `burn` | Subtitle: sumber, bahasa, jenis |
+| `CLIPPER_SUB_SCALE` / `CLIPPER_SUB_FONT` | `1.0` / kosong | Ukuran teks subtitle dan nama font |
+| `CLIPPER_WHISPER_MODEL` / `_DEVICE` / `_COMPUTE` / `_DIR` | `base` / `auto` / `auto` / kosong | Pengaturan Whisper |
+| `CLIPPER_AUTH_USER` / `CLIPPER_AUTH_PASSWORD` | kosong | Login web UI (wajib di server) |
+| `CLIPPER_MAX_JOBS` / `CLIPPER_MAX_CLIP_SECONDS` / `CLIPPER_RETENTION_HOURS` | `2` / `0` / `0` | Batas render bersamaan, durasi klip, masa simpan hasil |
+| `CLIPPER_ALLOWED_DOMAINS` | kosong | Daftar domain yang boleh diunduh (pisahkan koma) |
+| `CLIPPER_LIVE_WORKERS` | `4` | Unduhan segmen paralel (1-16) |
+| `CLIPPER_LIVE_MARGIN` | `1` | Segmen cadangan di tiap sisi rentang (0-5) |
+| `CLIPPER_LIVE_RETRIES` / `CLIPPER_HTTP_TIMEOUT` | `4` / `30` | Percobaan ulang per segmen / batas waktu HTTP (detik) |
+| `CLIPPER_VIDEO_PRESET` / `CLIPPER_VIDEO_CRF` | `veryfast` / `20` | Pengaturan render x264 pada mode live |
+| `CLIPPER_AUDIO_BITRATE` | `192k` | Bitrate audio (mp3/aac) |
+| `CLIPPER_HOST` / `CLIPPER_PORT` | `127.0.0.1` / `5000` | Alamat web UI |
+| `CLIPPER_ENV_FILE` | kosong | Path file `.env` lain |
+
+Opsi CLI (`-q`, `-o`, `--mode`, `--fast`) selalu menimpa nilai dari `.env`. Jangan commit `.env` atau `cookies.txt`
+(sudah ada di `.gitignore`).
+
 ## Cara pakai
 
 ### A. Web UI
@@ -38,6 +73,68 @@ python cli.py URL -s 1:00 -e 1:30 -q audio              # hanya audio mp3
 Format waktu: `90`, `1:30`, `01:02:03`, `1:30.5`, `1m30s`, `1h2m3s`.
 
 Hasil tersimpan di folder `output/`.
+
+## Frame untuk TikTok, Instagram, YouTube, dll.
+
+```bash
+python cli.py URL -s 1:30 -e 2:00 --frame tiktok                 # 9:16 (1080x1920), latar buram
+python cli.py URL -s 1:30 -e 2:00 --frame instagram --fit crop   # 4:5 feed, potong tengah
+python cli.py URL -s 1:30 -e 2:00 --frame reels --fit crop --focus 0.3   # fokus ke sisi kiri
+python cli.py URL -s 1:30 -e 2:00 --frame 3:4                    # rasio bebas; atau ukuran: --frame 720x1280
+python cli.py --list-frames                                      # semua preset
+```
+Preset: `original`, `tiktok` / `reels` / `shorts` / `story` (9:16), `instagram` / `ig-feed` (4:5), `square` (1:1),
+`youtube` (16:9), `twitter` / `x` (16:9 720p), `cinema` (21:9), serta rasio `A:B` atau ukuran `LEBARxTINGGI`.
+
+`--fit` menentukan cara mengisi frame: **blur** (video utuh di tengah, latar buram; tidak ada yang terpotong),
+**crop** (potong tengah, `--focus 0-1` menggeser posisi), **pad** (bingkai hitam). Kualitas sumber memengaruhi hasil:
+untuk frame 1080p pakai `-q 1080`. Frame selain `original` selalu merender ulang video.
+
+## Subtitle (deteksi bahasa otomatis)
+
+```bash
+python cli.py URL -s 1:30 -e 2:00 --subs auto                    # caption YouTube bila ada, jika tidak pakai Whisper
+python cli.py URL -s 1:30 -e 2:00 --subs whisper --sub-lang auto # transkripsi AI, bahasa terdeteksi otomatis
+python cli.py URL -s 1:30 -e 2:00 --subs youtube --sub-lang en   # caption YouTube bahasa Inggris
+python cli.py URL -s 1:30 -e 2:00 --subs auto --frame tiktok --sub-mode soft   # track yang bisa dimatikan
+python cli.py URL -s 1:30 -e 2:00 --subs auto --sub-mode srt                   # file .srt terpisah
+```
+- `auto`: pakai caption YouTube (manual lebih dulu, lalu otomatis) bila ada; jika tidak, transkripsi Whisper pada klip.
+  Jika keduanya gagal, klip tetap dibuat tanpa subtitle dan muncul peringatan. `youtube` / `whisper` yang gagal menghentikan proses.
+- Bahasa: `auto` = bahasa asli video (caption YouTube) atau dideteksi Whisper dari ucapan; atau isi kode seperti `id`, `en`, `ja`.
+  Bahasa yang terdeteksi ditampilkan setelah proses.
+- Whisper bersifat opsional: `pip install -r requirements-whisper.txt`. Model diunduh sekali saat pertama dipakai
+  (butuh internet; `base` sekitar 150 MB). Ganti ukuran model dengan `CLIPPER_WHISPER_MODEL` (`tiny` ... `large-v3`).
+- Jenis: `burn` (tertanam; posisi otomatis menghindari area UI TikTok/Reels), `soft` (track mov_text), `srt` (file terpisah).
+- Livestream umumnya belum punya caption YouTube, jadi `auto` akan memakai Whisper pada audio klip.
+- Dengan subtitle aktif, pemotongan selalu presisi (`--fast` diabaikan) agar waktu subtitle sinkron.
+- Teks non-Latin (Arab, Mandarin, Jepang, Korea, dll.) butuh font yang sesuai di sistem (di Docker: build arg `INSTALL_CJK_FONTS=true`).
+
+## Deploy ke server (Docker)
+
+```bash
+cp .env.example .env        # isi minimal CLIPPER_AUTH_USER dan CLIPPER_AUTH_PASSWORD
+docker compose up -d --build
+docker compose logs -f
+```
+Web UI berjalan di `127.0.0.1:5000` pada server. Untuk akses dari internet, **pasang reverse proxy HTTPS** (jangan buka
+port 5000 langsung). Contoh Caddy (HTTPS otomatis):
+```
+clipper.contoh.com {
+    reverse_proxy 127.0.0.1:5000
+}
+```
+Catatan penting:
+- **Selalu isi login** (`CLIPPER_AUTH_USER` / `CLIPPER_AUTH_PASSWORD`). Tanpa itu siapa pun yang menemukan alamatnya dapat memakai
+  CPU dan bandwidth server Anda. Disarankan juga `CLIPPER_ALLOWED_DOMAINS=youtube.com,youtu.be` agar server hanya mengunduh dari domain itu.
+- Atur beban dengan `CLIPPER_MAX_JOBS` (render bersamaan; sisanya antre), `CLIPPER_MAX_CLIP_SECONDS` (bawaan compose 1800),
+  dan `CLIPPER_RETENTION_HOURS` (hapus hasil otomatis, bawaan compose 24 jam).
+- Container berjalan sebagai user non-root. Data (hasil klip dan model Whisper) ada di volume `clipper-data`.
+- Hanya 1 proses gunicorn (status job ada di memori); jangan menambah `--workers`.
+- Image tanpa Whisper (lebih kecil): ubah `WITH_WHISPER: "false"` di `docker-compose.yml`. GPU tidak disiapkan di image ini.
+- Perbarui yt-dlp secara berkala: `docker compose build --no-cache && docker compose up -d`.
+- Proxy/cookies untuk YouTube: isi `CLIPPER_PROXY` / `CLIPPER_COOKIES_FILE` di `.env` (mount file cookies ke container).
+- Endpoint cek kesehatan: `GET /healthz`.
 
 ## Livestream yang masih berjalan (mode live)
 
@@ -65,11 +162,10 @@ Syarat & batasan:
 - Mode live selalu merender ulang (libx264 + AAC), jadi lebih lambat dari mode `--fast` pada video biasa.
 - Estimasi data: sebesar klip + sekitar 3 segmen tambahan (2 margin + sq=0).
 
-Uji offline tanpa internet (server YouTube tiruan, butuh ffmpeg): `python tests/test_live_local.py`
+Uji offline tanpa internet (butuh ffmpeg): `python tests/test_live_local.py` (mode live), `python tests/test_subs_frames.py` (subtitle, frame, render), `python tests/test_web.py` (web app) dan `python tests/test_config.py` (konfigurasi).
 
 ## Catatan
 - Mode presisi (default) memotong tepat di detik yang diminta; `--fast` jauh lebih cepat tapi bisa meleset beberapa detik.
-- Jika YouTube meminta login/anti-bot, tambahkan cookies browser: set opsi `cookiesfrombrowser` di `clipper.py`
-  (mis. `opts["cookiesfrombrowser"] = ("chrome",)`).
+- Jika YouTube meminta login/anti-bot, isi `CLIPPER_COOKIES_FROM_BROWSER=chrome` (atau `CLIPPER_COOKIES_FILE`) di `.env`.
 - Perbarui yt-dlp secara berkala: `pip install -U yt-dlp` (YouTube sering berubah).
 - Gunakan hanya untuk konten yang kamu punya hak/izin memakainya.

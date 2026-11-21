@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+cookies.txt
+output/
+data/
+.venv/
+__pycache__/
+*.pyc
+tests/
+.git/
+.gitignore
+Dockerfile
+docker-compose.yml

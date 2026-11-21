@@ -1,26 +1,5 @@
-# Python bytecode and caches
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Virtual environments and local environment settings
-.venv/
-venv/
-env/
 .env
-.env.*
-!.env.example
-
-# Generated clips and temporary downloads
 output/
-*.part
-*.ytdl
-
-# Editor and operating system files
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-Desktop.ini
+.venv/
+__pycache__/
+cookies.txt

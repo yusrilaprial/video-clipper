@@ -184,6 +184,94 @@ def main():
             except exc as e:
                 ok &= check(label, True, str(e))
 
+        # 3d) konfigurasi via env memengaruhi hasil
+        import os
+        import config
+        keep = {k: v for k, v in os.environ.items() if not k.startswith("CLIPPER_")}
+        def run_with(**kw):
+            os.environ.clear(); os.environ.update(keep)
+            os.environ.update({f"CLIPPER_{k}": str(v) for k, v in kw.items()})
+            config.reload()
+            return clip_from_formats("uji", vf, af, "0:10", "0:20")  # tanpa output_dir -> dari env
+        outdir = tmp / "dari_env"
+        hi = run_with(OUTPUT_DIR=outdir, VIDEO_CRF=5, AUDIO_BITRATE="320k")
+        ok &= check("CLIPPER_OUTPUT_DIR dipakai", hi.parent == outdir and hi.exists(), str(hi.parent.name))
+        lo_dir = tmp / "dari_env2"
+        lo = run_with(OUTPUT_DIR=lo_dir, VIDEO_CRF=45, VIDEO_PRESET="ultrafast", AUDIO_BITRATE="64k")
+        ok &= check("CLIPPER_VIDEO_CRF memengaruhi ukuran", lo.stat().st_size < hi.stat().st_size,
+                    f"crf5={hi.stat().st_size} B, crf45={lo.stat().st_size} B")
+        try:
+            run_with(OUTPUT_DIR=tmp / "x3", FFMPEG_PATH="/tidak/ada/ffmpeg")
+            ok &= check("ffmpeg salah -> pesan ramah", False)
+        except LiveClipError as e:
+            ok &= check("ffmpeg salah -> pesan ramah", "CLIPPER_FFMPEG_PATH" in str(e), str(e)[:70])
+        os.environ.clear(); os.environ.update(keep); config.reload()
+
+        # 3e) frame + subtitle (Whisper palsu: deteksi bahasa otomatis) pada mode live
+        import types
+        from types import SimpleNamespace
+        import subtitles
+        calls = {}
+
+        class FakeModel:
+            def __init__(self, *a, **k): pass
+            def transcribe(self, path, language=None, vad_filter=True, beam_size=5):
+                calls["language"] = language
+                calls["wav_dur"] = duration(Path(path))
+                segs = [SimpleNamespace(start=1.0, end=3.0, text=" halo semua selamat datang "),
+                        SimpleNamespace(start=5.0, end=6.0, text="")]
+                return iter(segs), SimpleNamespace(language="id", language_probability=0.97)
+
+        fake = types.ModuleType("faster_whisper"); fake.WhisperModel = FakeModel
+        sys.modules["faster_whisper"] = fake
+        subtitles._model.cache_clear()
+        msgs = []
+        base = {"frame": "tiktok", "fit": "blur"}
+        plain = clip_from_formats("uji", vf, af, "0:20", "0:30", tmp / "o8a", look={**base, "subs": "off"})
+        burned = clip_from_formats("uji", vf, af, "0:20", "0:30", tmp / "o8b", progress=msgs.append,
+                                   look={**base, "subs": "whisper", "sub_mode": "burn"})
+        import render as _r
+        ok &= check("frame tiktok 1080x1920", _r.probe_size(burned) == (1080, 1920), str(_r.probe_size(burned)))
+        ok &= check("nama file memuat tag frame", "[tiktok]" in burned.name, burned.name)
+        ok &= check("bahasa auto -> Whisper language=None", calls.get("language") is None, str(calls))
+        ok &= check("audio ke Whisper = durasi klip", abs(calls.get("wav_dur", 0) - 10) < 0.3, f"{calls.get('wav_dur'):.2f}s")
+        ok &= check("bahasa terdeteksi dilaporkan", any("terdeteksi 'id'" in m.get("message", "") for m in msgs if m.get("status") == "message"))
+
+        def gray(path, t):
+            r = subprocess.run(["ffmpeg", "-loglevel", "error", "-ss", str(t), "-i", str(path), "-frames:v", "1",
+                                "-vf", "scale=108:192,format=gray", "-f", "rawvideo", "-"], capture_output=True)
+            return r.stdout
+        def mad(a, b): return sum(abs(x - y) for x, y in zip(a, b)) / len(a)
+        d_in, d_out = mad(gray(plain, 2.0), gray(burned, 2.0)), mad(gray(plain, 6.0), gray(burned, 6.0))
+        ok &= check("subtitle tampil saat cue (detik 2)", d_in > 0.5, f"selisih={d_in:.2f}")
+        ok &= check("tidak ada subtitle di luar cue (detik 6)", d_out < 0.3, f"selisih={d_out:.2f}")
+
+        soft = clip_from_formats("uji", vf, af, "0:20", "0:30", tmp / "o8c",
+                                 look={"frame": "original", "subs": "whisper", "sub_mode": "soft"})
+        codecs = sh("ffprobe", "-v", "error", "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(soft)).stdout.split()
+        ok &= check("subtitle soft = track mov_text", "mov_text" in codecs, ",".join(codecs))
+        side = clip_from_formats("uji", vf, af, "0:20", "0:30", tmp / "o8d",
+                                 look={"frame": "square", "subs": "whisper", "sub_mode": "srt"})
+        srt = side.with_suffix(".srt")
+        ok &= check("mode srt: file .srt di samping video", srt.exists() and "halo semua" in srt.read_text(), srt.name)
+        ok &= check("frame square 1080x1080", _r.probe_size(side) == (1080, 1080))
+        mp3 = clip_from_formats("uji", None, af, "0:20", "0:30", tmp / "o8e", look={"subs": "whisper"})
+        ok &= check("audio saja + subs -> mp3 + srt", mp3.suffix == ".mp3" and mp3.with_suffix(".srt").exists())
+
+        # whisper tidak terpasang: 'whisper' gagal tegas, 'auto' tetap membuat klip + peringatan
+        sys.modules["faster_whisper"] = None
+        subtitles._model.cache_clear()
+        try:
+            clip_from_formats("uji", vf, af, "0:20", "0:30", tmp / "o8f", look={"subs": "whisper"})
+            ok &= check("whisper tidak terpasang -> error jelas", False)
+        except subtitles.SubtitleError as e:
+            ok &= check("whisper tidak terpasang -> error jelas", "faster-whisper" in str(e))
+        msgs2 = []
+        out_auto = clip_from_formats("uji", vf, af, "0:20", "0:30", tmp / "o8g", progress=msgs2.append, look={"subs": "auto"})
+        ok &= check("subs=auto gagal -> klip tetap jadi + peringatan",
+                    out_auto.exists() and any(m.get("level") == "warning" for m in msgs2 if m.get("status") == "message"))
+        sys.modules.pop("faster_whisper", None)
+
         # 4) melewati live edge
         try:
             clip_from_formats("uji", vf, af, 100, 500, tmp / "o4")

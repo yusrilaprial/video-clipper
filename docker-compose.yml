@@ -1,0 +1,39 @@
+# Jalankan:  cp .env.example .env   (isi minimal CLIPPER_AUTH_USER / CLIPPER_AUTH_PASSWORD)
+#            docker compose up -d --build
+# Butuh Docker Compose >= 2.24 (sintaks env_file dengan required: false).
+services:
+  clipper:
+    build:
+      context: .
+      args:
+        WITH_WHISPER: "true"        # false = tanpa Whisper (image lebih kecil)
+        INSTALL_CJK_FONTS: "false"  # true = font untuk subtitle Mandarin/Jepang/Korea
+    image: video-clipper:latest
+    container_name: video-clipper
+    restart: unless-stopped
+    ports:
+      # Hanya localhost. Untuk akses publik pasang reverse proxy HTTPS (lihat README), jangan buka port ini langsung.
+      - "127.0.0.1:${CLIPPER_PORT:-5000}:5000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Nilai di bawah menimpa .env agar cocok dengan isi container
+      CLIPPER_HOST: "0.0.0.0"
+      CLIPPER_PORT: "5000"
+      CLIPPER_OUTPUT_DIR: /data/output
+      CLIPPER_WHISPER_DIR: /data/models
+      CLIPPER_RETENTION_HOURS: "${CLIPPER_RETENTION_HOURS:-24}"
+      CLIPPER_MAX_JOBS: "${CLIPPER_MAX_JOBS:-2}"
+      CLIPPER_MAX_CLIP_SECONDS: "${CLIPPER_MAX_CLIP_SECONDS:-1800}"
+    volumes:
+      - clipper-data:/data          # hasil klip + model Whisper (tidak diunduh ulang)
+      # Alternatif folder biasa (izin: sudo chown -R 10001:10001 ./data):
+      # - ./data:/data
+    security_opt:
+      - no-new-privileges:true
+    # mem_limit: 4g
+    # cpus: 2
+
+volumes:
+  clipper-data:
