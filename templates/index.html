@@ -2,116 +2,808 @@
 <html lang="id">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0b0d12">
 <title>Video Clipper</title>
+<script>
+  // terapkan tema tersimpan sebelum render (hindari kedipan)
+  try { var t = localStorage.getItem('clipper.theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
 <style>
-  :root { --bg:#0f1115; --card:#181b22; --fg:#e8eaf0; --mut:#8b93a7; --acc:#4f8cff; --err:#ff6b6b; --ok:#3ecf8e; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--fg); display:flex; justify-content:center; padding:24px; }
-  .card { background:var(--card); border-radius:14px; padding:24px; width:100%; max-width:560px; }
-  h1 { margin:0 0 16px; font-size:1.3rem; }
-  label { display:block; font-size:.85rem; color:var(--mut); margin:14px 0 6px; }
-  input, select, button { width:100%; padding:11px 12px; border-radius:8px; border:1px solid #2a2f3a; background:#10131a; color:var(--fg); font-size:1rem; }
-  .row { display:flex; gap:12px; } .row > div { flex:1; }
-  button { background:var(--acc); border:none; font-weight:600; cursor:pointer; margin-top:18px; }
-  button.sec { background:#2a2f3a; margin-top:8px; }
-  button:disabled { opacity:.5; cursor:wait; }
-  .info { display:flex; gap:12px; margin-top:12px; align-items:center; font-size:.9rem; }
-  .info img { width:120px; border-radius:6px; }
-  .chk { display:flex; gap:8px; align-items:center; margin-top:14px; font-size:.9rem; color:var(--mut); }
-  .chk input { width:auto; }
-  #status { margin-top:16px; font-size:.95rem; min-height:1.2em; }
-  .err { color:var(--err); } .ok { color:var(--ok); }
-  a.dl { display:block; text-align:center; margin-top:10px; padding:11px; background:var(--ok); color:#06241a; border-radius:8px; font-weight:600; text-decoration:none; }
+  :root {
+    --bg:#0b0d12; --bg2:#121726; --card:#161a22; --card2:#1b2030; --border:rgba(255,255,255,.08);
+    --fg:#eef0f6; --mut:#9aa3b8; --field:#10131a; --field-b:#2a2f3a; --hover:rgba(255,255,255,.05);
+    --acc:#4f8cff; --acc2:#7b61ff; --acc-soft:rgba(79,140,255,.14);
+    --err:#ff6b6b; --err-bg:rgba(255,107,107,.1); --ok:#3ecf8e; --ok-bg:rgba(62,207,142,.1);
+    --warn:#e0a030; --warn-bg:rgba(224,160,48,.1); --shadow:0 12px 36px rgba(0,0,0,.35);
+    --r:16px; --safe-b:env(safe-area-inset-bottom,0px);
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg:#eef2fb; --bg2:#e2e9fb; --card:#ffffff; --card2:#f4f7fe; --border:rgba(20,30,60,.09);
+      --fg:#151a2b; --mut:#5d6783; --field:#fff; --field-b:#ccd4e6; --hover:rgba(20,30,60,.05);
+      --acc-soft:rgba(79,140,255,.12); --err:#d33a3a; --err-bg:rgba(211,58,58,.08);
+      --ok:#16905c; --ok-bg:rgba(22,144,92,.09); --warn:#a96f00; --warn-bg:rgba(169,111,0,.09);
+      --shadow:0 12px 36px rgba(40,60,120,.14);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg:#eef2fb; --bg2:#e2e9fb; --card:#ffffff; --card2:#f4f7fe; --border:rgba(20,30,60,.09);
+    --fg:#151a2b; --mut:#5d6783; --field:#fff; --field-b:#ccd4e6; --hover:rgba(20,30,60,.05);
+    --acc-soft:rgba(79,140,255,.12); --err:#d33a3a; --err-bg:rgba(211,58,58,.08);
+    --ok:#16905c; --ok-bg:rgba(22,144,92,.09); --warn:#a96f00; --warn-bg:rgba(169,111,0,.09);
+    --shadow:0 12px 36px rgba(40,60,120,.14);
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html { -webkit-text-size-adjust:100%; }
+  body {
+    margin:0; min-height:100vh; min-height:100dvh; color:var(--fg);
+    font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:radial-gradient(900px 500px at 8% -5%, rgba(79,140,255,.16), transparent 60%),
+               radial-gradient(800px 500px at 100% 0%, rgba(123,97,255,.13), transparent 60%), var(--bg);
+    background-attachment:fixed;
+    padding-bottom:calc(88px + var(--safe-b));
+  }
+  .ic { width:1.15em; height:1.15em; flex:none; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  [hidden] { display:none !important; }
+  a { color:var(--acc); }
+
+  /* ---------- app bar ---------- */
+  .appbar {
+    position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:12px; padding:10px 16px;
+    padding-top:calc(10px + env(safe-area-inset-top,0px)); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    background:var(--bg); background:color-mix(in srgb, var(--bg) 78%, transparent); border-bottom:1px solid var(--border);
+  }
+  .brand { display:flex; align-items:center; gap:11px; font-weight:700; font-size:1.05rem; letter-spacing:-.01em; margin-right:auto; }
+  .logo { width:36px; height:36px; border-radius:11px; display:grid; place-items:center; color:#fff;
+          background:linear-gradient(135deg,var(--acc),var(--acc2)); box-shadow:0 6px 16px rgba(79,140,255,.35); }
+  .logo .ic { width:19px; height:19px; }
+  .iconbtn, .linkbtn {
+    display:inline-flex; align-items:center; justify-content:center; gap:8px; height:40px; min-width:40px; padding:0 12px;
+    border-radius:11px; border:1px solid var(--border); background:var(--card); color:var(--mut); cursor:pointer;
+    font:inherit; font-size:.9rem; font-weight:600; transition:color .15s, background .15s, border-color .15s;
+  }
+  .iconbtn:hover, .linkbtn:hover { color:var(--fg); background:var(--hover); }
+  .iconbtn:focus-visible, .linkbtn:focus-visible, .btn:focus-visible, .chip:focus-visible { outline:3px solid rgba(79,140,255,.5); outline-offset:2px; }
+  .linkbtn span { display:none; }
+  .appbar form { margin:0; }
+  #themeBtn .moon { display:none; } :root[data-theme="light"] #themeBtn .sun { display:none; } :root[data-theme="light"] #themeBtn .moon { display:block; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) #themeBtn .sun { display:none; } :root:not([data-theme="dark"]) #themeBtn .moon { display:block; } }
+  :root[data-theme="dark"] #themeBtn .sun { display:block; } :root[data-theme="dark"] #themeBtn .moon { display:none; }
+
+  /* ---------- layout ---------- */
+  .layout { width:100%; max-width:1180px; margin:0 auto; padding:16px; display:grid; grid-template-columns:minmax(0,1fr); gap:16px; }
+  .stack { display:grid; gap:16px; align-content:start; min-width:0; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:18px; box-shadow:var(--shadow); min-width:0; }
+  .card h2 { display:flex; align-items:center; gap:10px; margin:0 0 14px; font-size:1.02rem; letter-spacing:-.005em; }
+  .step { width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font-size:.8rem; font-weight:700; color:#fff;
+          background:linear-gradient(135deg,var(--acc),var(--acc2)); flex:none; }
+  .card h2 small { margin-left:auto; font-weight:500; color:var(--mut); font-size:.8rem; }
+  @media (min-width:640px) { .layout { padding:22px; gap:20px; } .stack { gap:20px; } .card { padding:22px; } }
+  @media (min-width:980px) {
+    .layout { grid-template-columns:minmax(0,1fr) 390px; align-items:start; padding:28px; }
+    .side { position:sticky; top:84px; }
+    body { padding-bottom:32px; }
+    .linkbtn span { display:inline; }
+  }
+
+  /* ---------- form elements ---------- */
+  label.lbl { display:block; margin:0 0 7px; font-size:.82rem; font-weight:600; color:var(--mut); }
+  .input {
+    width:100%; height:48px; padding:0 14px; border-radius:12px; font:inherit; color:var(--fg);
+    background:var(--field); border:1px solid var(--field-b); outline:none; transition:border-color .15s, box-shadow .15s;
+  }
+  .input::placeholder { color:var(--mut); opacity:.65; }
+  .input:focus { border-color:var(--acc); box-shadow:0 0 0 4px rgba(79,140,255,.18); }
+  .input.bad { border-color:var(--err); }
+  .input.bad:focus { box-shadow:0 0 0 4px rgba(255,107,107,.16); }
+  .urlrow { position:relative; display:flex; gap:8px; }
+  .urlrow .input { padding-left:44px; padding-right:12px; }
+  .urlrow > .lead { position:absolute; left:15px; top:15px; color:var(--mut); pointer-events:none; width:18px; height:18px; }
+  .msg { margin:8px 2px 0; font-size:.85rem; color:var(--mut); min-height:1.2em; }
+  .msg.err { color:var(--err); } .msg.ok { color:var(--ok); } .msg.warn { color:var(--warn); }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .help { margin:10px 2px 0; font-size:.84rem; color:var(--mut); }
+  .field { margin-top:16px; } .field:first-child { margin-top:0; }
+
+  .seg { display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:4px; padding:4px; border-radius:13px; background:var(--field); border:1px solid var(--field-b); }
+  .seg label { position:relative; margin:0; min-width:0; }
+  .seg input { position:absolute; opacity:0; inset:0; width:100%; height:100%; margin:0; cursor:pointer; }
+  .seg span { display:flex; align-items:center; justify-content:center; text-align:center; min-height:40px; padding:4px 6px; border-radius:10px;
+              font-size:.88rem; font-weight:600; color:var(--mut); transition:all .15s; line-height:1.2; }
+  .seg label:hover span { color:var(--fg); }
+  .seg input:checked + span { color:#fff; background:linear-gradient(135deg,var(--acc),var(--acc2)); box-shadow:0 4px 12px rgba(79,140,255,.3); }
+  .seg input:focus-visible + span { outline:3px solid rgba(79,140,255,.5); outline-offset:1px; }
+
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .chip { display:inline-flex; align-items:center; gap:6px; height:38px; padding:0 14px; border-radius:999px; font:inherit; font-size:.86rem; font-weight:600;
+          color:var(--fg); background:var(--card2); border:1px solid var(--border); cursor:pointer; transition:all .15s; }
+  .chip:hover { border-color:var(--acc); background:var(--acc-soft); }
+  .chip.on { border-color:var(--acc); background:var(--acc-soft); color:var(--acc); }
+
+  .frames { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+  .fcard { position:relative; margin:0; }
+  .fcard input { position:absolute; inset:0; width:100%; height:100%; opacity:0; margin:0; cursor:pointer; }
+  .fbody { height:100%; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:6px; padding:12px 6px 10px; border-radius:13px;
+           background:var(--field); border:1.5px solid var(--field-b); text-align:center; transition:all .15s; }
+  .fbox { height:38px; display:flex; align-items:center; justify-content:center; }
+  .shape { border-radius:5px; border:2px solid var(--mut); background:var(--card2); transition:all .15s; }
+  .shape.dash { border-style:dashed; }
+  .fbody b { font-size:.82rem; line-height:1.15; }
+  .fbody small { font-size:.72rem; color:var(--mut); line-height:1.1; }
+  .fcard:hover .fbody { border-color:var(--mut); }
+  .fcard input:checked + .fbody { border-color:var(--acc); background:var(--acc-soft); box-shadow:0 0 0 3px rgba(79,140,255,.16); }
+  .fcard input:checked + .fbody .shape { border-color:var(--acc); background:rgba(79,140,255,.25); }
+  .fcard input:focus-visible + .fbody { outline:3px solid rgba(79,140,255,.5); outline-offset:2px; }
+  @media (min-width:520px) { .frames { grid-template-columns:repeat(5,minmax(0,1fr)); } }
+  .subpanel { margin-top:16px; padding-top:16px; border-top:1px dashed var(--border); display:grid; gap:14px; }
+  datalist { display:none; }
+
+  input[type=range].plain { width:100%; accent-color:var(--acc); height:28px; }
+  .focusrow { display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; font-size:.84rem; color:var(--mut); }
+
+  .switch { display:flex; align-items:flex-start; gap:12px; cursor:pointer; margin:0; padding:8px 0; }
+  .switch input { position:absolute; opacity:0; width:0; height:0; }
+  .knob { position:relative; flex:none; width:44px; height:26px; border-radius:999px; background:var(--field-b); transition:background .2s; margin-top:1px; }
+  .knob::after { content:""; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.3); transition:transform .2s; }
+  .switch input:checked + .knob { background:var(--acc); }
+  .switch input:checked + .knob::after { transform:translateX(18px); }
+  .switch input:focus-visible + .knob { outline:3px solid rgba(79,140,255,.5); outline-offset:2px; }
+  .switch input:disabled + .knob { opacity:.55; }
+  .switch .t { display:grid; gap:1px; font-size:.92rem; font-weight:600; } .switch .t small { font-weight:400; color:var(--mut); font-size:.8rem; }
+
+  /* ---------- pratinjau video ---------- */
+  .preview { display:flex; gap:14px; margin-top:14px; padding:12px; border-radius:14px; background:var(--card2); border:1px solid var(--border); animation:fade .25s ease; }
+  .thumb { position:relative; flex:none; width:128px; aspect-ratio:16/9; border-radius:9px; overflow:hidden; background:var(--field); }
+  .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .pinfo { min-width:0; display:grid; gap:4px; align-content:center; }
+  .ptitle { font-weight:650; font-size:.95rem; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+  .pmeta { color:var(--mut); font-size:.82rem; overflow-wrap:anywhere; min-width:0; display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center; }
+  .badge { display:inline-flex; align-items:center; gap:6px; padding:2px 9px; border-radius:999px; font-size:.72rem; font-weight:700; letter-spacing:.04em; }
+  .badge.live { background:var(--err-bg); color:var(--err); } .badge.live::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--err); animation:pulse 1.4s infinite; }
+  .badge.dur { background:var(--acc-soft); color:var(--acc); }
+  .skeleton { height:94px; margin-top:14px; border-radius:14px; background:linear-gradient(100deg,var(--card2) 30%,var(--hover) 50%,var(--card2) 70%); background-size:200% 100%; animation:shimmer 1.2s infinite linear; }
+  @media (max-width:420px) { .preview { flex-direction:column; } .thumb { width:100%; } }
+
+  /* ---------- slider rentang ---------- */
+  .range { position:relative; height:44px; margin:18px 4px 4px; }
+  .range .track { position:absolute; left:0; right:0; top:50%; height:6px; margin-top:-3px; border-radius:6px; background:var(--field-b); }
+  .range .fill { position:absolute; top:0; bottom:0; border-radius:6px; background:linear-gradient(90deg,var(--acc),var(--acc2)); }
+  .range input[type=range] { position:absolute; left:-4px; width:calc(100% + 8px); top:0; height:44px; margin:0; background:none; pointer-events:none; -webkit-appearance:none; appearance:none; }
+  .range input[type=range]::-webkit-slider-runnable-track { background:none; height:44px; }
+  .range input[type=range]::-moz-range-track { background:none; }
+  .range input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; pointer-events:auto; width:26px; height:26px; margin-top:9px; border-radius:50%; background:#fff; border:3px solid var(--acc); box-shadow:0 2px 8px rgba(0,0,0,.35); cursor:grab; }
+  .range input[type=range]::-moz-range-thumb { pointer-events:auto; width:20px; height:20px; border-radius:50%; background:#fff; border:3px solid var(--acc); box-shadow:0 2px 8px rgba(0,0,0,.35); cursor:grab; }
+  .range input[type=range]:focus-visible::-webkit-slider-thumb { outline:3px solid rgba(79,140,255,.55); outline-offset:2px; }
+  .ticks { display:flex; justify-content:space-between; margin:0 2px; font-size:.78rem; color:var(--mut); }
+  .rinfo { display:flex; align-items:center; gap:8px; margin-top:12px; padding:10px 12px; border-radius:11px; background:var(--card2); font-size:.88rem; color:var(--mut); }
+  .rinfo.err { background:var(--err-bg); color:var(--err); } .rinfo.ok b { color:var(--fg); }
+
+  /* ---------- ringkasan, tombol ---------- */
+  .sum { display:grid; gap:10px; margin:0 0 16px; }
+  .sum div { display:grid; grid-template-columns:92px 1fr; gap:10px; font-size:.9rem; align-items:baseline; }
+  .sum dt { color:var(--mut); } .sum dd { margin:0; font-weight:600; overflow-wrap:anywhere; min-width:0; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:9px; width:100%; height:52px; border:0; border-radius:13px; cursor:pointer; color:#fff;
+         font:inherit; font-weight:700; letter-spacing:.01em; background:linear-gradient(135deg,var(--acc),var(--acc2)); box-shadow:0 10px 22px rgba(79,140,255,.32); transition:transform .12s, filter .12s, box-shadow .12s; }
+  .btn:hover:not(:disabled) { filter:brightness(1.07); } .btn:active:not(:disabled) { transform:translateY(1px); }
+  .btn:disabled { cursor:not-allowed; filter:saturate(.4) brightness(.85); box-shadow:none; }
+  .btn.sec { background:var(--card2); color:var(--fg); box-shadow:none; border:1px solid var(--border); height:46px; font-weight:600; }
+  .btn.ok { background:linear-gradient(135deg,#27b97a,#1f9d8f); box-shadow:0 10px 22px rgba(39,185,122,.28); height:48px; }
+  .btn .spin { display:none; width:18px; height:18px; border-radius:50%; border:2.5px solid rgba(255,255,255,.35); border-top-color:#fff; animation:spin .7s linear infinite; }
+  .btn.loading .spin { display:block; } .btn.loading .ic { display:none; }
+  .actionbar { position:fixed; left:0; right:0; bottom:0; z-index:40; display:flex; align-items:center; gap:12px; padding:10px 16px calc(10px + var(--safe-b));
+               background:var(--bg); background:color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border-top:1px solid var(--border); }
+  .actionbar .abinfo { min-width:0; flex:1; font-size:.82rem; color:var(--mut); line-height:1.3; }
+  .actionbar .abinfo b { display:block; color:var(--fg); font-size:.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .actionbar .btn { width:auto; padding:0 26px; flex:none; }
+  .cta-side { display:none; }
+  @media (min-width:980px) { .actionbar { display:none; } .cta-side { display:flex; } }
+
+  /* ---------- progres & hasil ---------- */
+  .banner { display:flex; gap:10px; align-items:flex-start; padding:11px 13px; border-radius:12px; font-size:.9rem; line-height:1.4; border:1px solid transparent; margin-top:12px; }
+  .banner .ic { margin-top:2px; } .banner.err { background:var(--err-bg); border-color:rgba(255,107,107,.35); color:var(--err); }
+  .banner.warn { background:var(--warn-bg); border-color:rgba(224,160,48,.35); color:var(--warn); } .banner.info { background:var(--acc-soft); border-color:rgba(79,140,255,.3); color:var(--acc); }
+  .steps { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:4px 0 14px; }
+  .stp { display:grid; gap:6px; justify-items:center; text-align:center; font-size:.76rem; color:var(--mut); font-weight:600; }
+  .dot { width:28px; height:28px; border-radius:50%; display:grid; place-items:center; background:var(--field-b); color:#fff; font-size:.78rem; transition:all .2s; }
+  .dot .ic { width:15px; height:15px; display:none; }
+  .stp.on { color:var(--fg); } .stp.on .dot { background:linear-gradient(135deg,var(--acc),var(--acc2)); box-shadow:0 0 0 5px rgba(79,140,255,.18); }
+  .stp.done .dot { background:var(--ok); } .stp.done .dot .ic { display:block; } .stp.done .dot .n { display:none; }
+  .bar { height:8px; border-radius:8px; background:var(--field-b); overflow:hidden; }
+  .bar i { display:block; height:100%; width:0; border-radius:8px; background:linear-gradient(90deg,var(--acc),var(--acc2)); transition:width .4s ease; }
+  .bar.ind i { width:35%; animation:slide 1.3s infinite ease-in-out; }
+  .pmsg { display:flex; justify-content:space-between; gap:10px; margin-top:9px; font-size:.84rem; color:var(--mut); }
+  .notes { display:grid; gap:6px; margin-top:12px; }
+  .note { display:flex; gap:8px; font-size:.84rem; color:var(--mut); } .note.warning { color:var(--warn); } .note .ic { margin-top:3px; width:14px; height:14px; }
+  .player { width:100%; max-height:62vh; border-radius:13px; background:#000; display:block; }
+  .audio { width:100%; }
+  .rmeta { display:flex; justify-content:space-between; gap:10px; margin:10px 2px 14px; font-size:.84rem; color:var(--mut); }
+  .rmeta b { color:var(--fg); overflow-wrap:anywhere; font-weight:600; min-width:0; }
+  .btnrow { display:grid; gap:10px; } @media (min-width:420px) { .btnrow.two { grid-template-columns:1fr 1fr; } }
+  .restart { margin-top:10px; }
+
+  /* ---------- riwayat ---------- */
+  .hlist { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; margin:0; padding:0; list-style:none; }
+  .hitem { min-width:0; display:flex; align-items:center; gap:10px; padding:10px 10px 10px 12px; border-radius:12px; background:var(--card2); border:1px solid var(--border); }
+  .hitem .hn { min-width:0; flex:1; } .hitem .hn b { display:block; font-size:.86rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hitem .hn small { color:var(--mut); font-size:.76rem; } .hitem.gone .hn b { text-decoration:line-through; opacity:.6; }
+  .hitem .iconbtn { height:36px; min-width:36px; padding:0 8px; }
+  .hempty { font-size:.88rem; color:var(--mut); margin:0; }
+  .hhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; } .hhead h2 { margin:0; }
+  .tiny { height:32px; min-width:0; font-size:.78rem; padding:0 10px; }
+
+  /* ---------- toast ---------- */
+  .toast { position:fixed; left:50%; bottom:calc(96px + var(--safe-b)); z-index:60; transform:translate(-50%,20px); opacity:0; pointer-events:none; max-width:calc(100% - 32px);
+           padding:11px 16px; border-radius:12px; font-size:.88rem; font-weight:600; color:var(--fg); background:var(--card2); border:1px solid var(--border); box-shadow:var(--shadow); transition:all .25s; }
+  .toast.show { opacity:1; transform:translate(-50%,0); } .toast.err { border-color:rgba(255,107,107,.5); color:var(--err); }
+  @media (min-width:980px) { .toast { bottom:28px; } }
+
+  /* target ketuk lebih besar di layar sentuh / ponsel (pedoman 44px) */
+  @media (pointer:coarse), (max-width:640px) {
+    .chip { height:44px; padding:0 16px; } .hitem .iconbtn { height:44px; min-width:44px; } .iconbtn.tiny { height:40px; padding:0 14px; }
+    .iconbtn, .linkbtn { height:44px; min-width:44px; } .seg span { min-height:44px; }
+  }
+  @keyframes spin { to { transform:rotate(360deg); } } @keyframes fade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+  @keyframes shimmer { to { background-position:-200% 0; } } @keyframes pulse { 50% { opacity:.3; } }
+  @keyframes slide { 0% { margin-left:-35%; } 100% { margin-left:100%; } }
+  @media (prefers-reduced-motion: reduce) { * { animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; } }
+  @media (max-width:360px) { .layout { padding:12px; } .card { padding:14px; } .row2 { gap:8px; } .seg span { font-size:.8rem; } }
 </style>
 </head>
 <body>
-<div class="card">
-  <h1>✂️ Video Clipper</h1>
-  <label>Link video (YouTube dll.)</label>
-  <input id="url" placeholder="https://www.youtube.com/watch?v=...">
-  <button class="sec" id="btnInfo">Cek video</button>
-  <div id="info"></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88"/><path d="M14.47 14.48 20 20"/><path d="M8.12 8.12 12 12"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+  <symbol id="i-caption" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4"/></symbol>
+</svg>
 
-  <div class="row">
-    <div><label>Mulai (mm:ss / hh:mm:ss)</label><input id="start" placeholder="1:30  (live: -1:30)"></div>
-    <div><label>Akhir</label><input id="end" placeholder="2:45  (live: 0:00)"></div>
+<header class="appbar">
+  <div class="brand"><span class="logo"><svg class="ic"><use href="#i-scissors"/></svg></span>Video Clipper</div>
+  <button type="button" class="iconbtn" id="themeBtn" aria-label="Ganti tema terang/gelap" title="Ganti tema">
+    <svg class="ic sun"><use href="#i-sun"/></svg><svg class="ic moon"><use href="#i-moon"/></svg>
+  </button>
+  {% if auth_enabled %}
+  <form method="post" action="/logout">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button type="submit" class="linkbtn" title="Keluar dari akun"><svg class="ic"><use href="#i-logout"/></svg><span>Keluar</span></button>
+  </form>
+  {% endif %}
+</header>
+
+<main class="layout">
+  <div class="stack">
+
+    <!-- 1. Video -->
+    <section class="card" aria-labelledby="h1">
+      <h2 id="h1"><span class="step">1</span>Link video</h2>
+      <div class="urlrow">
+        <svg class="ic lead"><use href="#i-link"/></svg>
+        <input class="input" id="url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false"
+               placeholder="Tempel link YouTube atau platform lain" aria-describedby="urlMsg">
+        <button type="button" class="iconbtn" id="btnPaste" aria-label="Tempel dari clipboard" title="Tempel dari clipboard"><svg class="ic"><use href="#i-clipboard"/></svg></button>
+        <button type="button" class="iconbtn" id="btnClear" aria-label="Hapus link" title="Hapus" hidden><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="msg" id="urlMsg" aria-live="polite"></div>
+      <div class="skeleton" id="skeleton" hidden></div>
+      <div class="preview" id="preview" hidden>
+        <div class="thumb"><img id="pthumb" alt="" loading="lazy" referrerpolicy="no-referrer"></div>
+        <div class="pinfo">
+          <div class="ptitle" id="ptitle"></div>
+          <div class="pmeta"><span id="puploader"></span><span class="badge live" id="plive" hidden>LIVE</span><span class="badge dur" id="pdur" hidden></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Rentang waktu -->
+    <section class="card" aria-labelledby="h2">
+      <h2 id="h2"><span class="step">2</span>Bagian yang dipotong{% if max_clip %}<small>maks. {{ max_clip // 60 }} mnt{{ ' %d dtk' % (max_clip % 60) if max_clip % 60 else '' }}</small>{% endif %}</h2>
+      <div class="row2">
+        <div><label class="lbl" for="start">Mulai</label><input class="input" id="start" inputmode="text" autocomplete="off" spellcheck="false" placeholder="0:00" aria-describedby="rinfo"></div>
+        <div><label class="lbl" for="end">Akhir</label><input class="input" id="end" inputmode="text" autocomplete="off" spellcheck="false" placeholder="0:30" aria-describedby="rinfo"></div>
+      </div>
+      <div class="range" id="range" hidden>
+        <div class="track"><div class="fill" id="fill"></div></div>
+        <input type="range" id="rs" min="0" max="100" step="1" value="0" aria-label="Geser waktu mulai">
+        <input type="range" id="re" min="0" max="100" step="1" value="100" aria-label="Geser waktu akhir">
+      </div>
+      <div class="ticks" id="ticks" hidden><span>0:00</span><span id="tickEnd"></span></div>
+      <div class="chips" id="chipsVod" hidden aria-label="Panjang cepat">
+        <button type="button" class="chip" data-len="15">15 dtk</button><button type="button" class="chip" data-len="30">30 dtk</button>
+        <button type="button" class="chip" data-len="60">1 mnt</button><button type="button" class="chip" data-len="120">2 mnt</button><button type="button" class="chip" data-len="300">5 mnt</button>
+      </div>
+      <div class="chips" id="chipsLive" hidden aria-label="Bagian terakhir dari live">
+        <button type="button" class="chip" data-last="60">1 mnt terakhir</button><button type="button" class="chip" data-last="180">3 mnt terakhir</button>
+        <button type="button" class="chip" data-last="300">5 mnt terakhir</button><button type="button" class="chip" data-last="600">10 mnt terakhir</button><button type="button" class="chip" data-last="1800">30 mnt terakhir</button>
+      </div>
+      <div class="rinfo" id="rinfo" aria-live="polite"><svg class="ic"><use href="#i-clock"/></svg><span id="rinfoText">Isi waktu mulai dan akhir, mis. 1:30 dan 2:00.</span></div>
+      <p class="help" id="liveHelp" hidden>Livestream: pakai waktu <b>relatif</b> (<code>-1:30</code> sampai <code>0:00</code> = 1,5 menit terakhir) atau waktu dari awal stream. DVR stream harus aktif.</p>
+    </section>
+
+    <!-- 3. Frame -->
+    <section class="card" aria-labelledby="h3">
+      <h2 id="h3"><span class="step">3</span>Frame</h2>
+      <div class="frames" role="radiogroup" aria-label="Pilih frame">
+        {% for f in frames %}
+        <label class="fcard"><input type="radio" name="frame" value="{{ f.id }}">
+          <span class="fbody"><span class="fbox"><span class="shape{{ ' dash' if not f.w }}" style="width:{{ f.sw }}px;height:{{ f.sh }}px"></span></span><b>{{ f.label }}</b><small>{{ f.ratio }}</small></span></label>
+        {% endfor %}
+        <label class="fcard"><input type="radio" name="frame" value="custom">
+          <span class="fbody"><span class="fbox"><span class="shape dash" style="width:26px;height:30px"></span></span><b>Kustom</b><small>rasio / ukuran</small></span></label>
+      </div>
+      <div class="subpanel" id="customBox" hidden>
+        <div><label class="lbl" for="customFrame">Rasio atau ukuran</label>
+        <input class="input" id="customFrame" autocomplete="off" spellcheck="false" placeholder="mis. 3:4 atau 720x1280" aria-describedby="customMsg">
+        <div class="msg" id="customMsg"></div></div>
+      </div>
+      <div class="subpanel" id="fitBox" hidden>
+        <div><label class="lbl" id="fitLbl">Cara mengisi frame</label>
+          <div class="seg" role="radiogroup" aria-labelledby="fitLbl">
+            <label><input type="radio" name="fit" value="blur"><span>Latar buram</span></label>
+            <label><input type="radio" name="fit" value="crop"><span>Potong tengah</span></label>
+            <label><input type="radio" name="fit" value="pad"><span>Bingkai hitam</span></label>
+          </div>
+          <p class="help" id="fitHelp"></p></div>
+        <div id="focusBox" hidden><label class="lbl" for="focus">Fokus potongan</label>
+          <div class="focusrow"><span>Kiri</span><input type="range" class="plain" id="focus" min="0" max="1" step="0.05" value="0.5"><span>Kanan</span></div></div>
+      </div>
+    </section>
+
+    <!-- 4. Subtitle -->
+    <section class="card" aria-labelledby="h4">
+      <h2 id="h4"><span class="step">4</span>Subtitle</h2>
+      <div class="seg" role="radiogroup" aria-label="Sumber subtitle">
+        <label><input type="radio" name="subs" value="off"><span>Mati</span></label>
+        <label><input type="radio" name="subs" value="auto"><span>Otomatis</span></label>
+        <label><input type="radio" name="subs" value="youtube"><span>YouTube</span></label>
+        <label><input type="radio" name="subs" value="whisper"><span>Whisper AI</span></label>
+      </div>
+      <p class="help" id="subsHelp"></p>
+      <div class="subpanel" id="subOpts" hidden>
+        <div><label class="lbl" for="subLang">Bahasa</label>
+          <input class="input" id="subLang" list="langs" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="auto" aria-describedby="langMsg">
+          <datalist id="langs"><option value="auto"><option value="id"><option value="en"><option value="ms"><option value="ja"><option value="ko"><option value="zh"><option value="ar"><option value="es"><option value="fr"><option value="de"><option value="pt"><option value="ru"><option value="hi"><option value="th"><option value="vi"></datalist>
+          <div class="msg" id="langMsg">auto = bahasa dideteksi otomatis. Atau isi kode seperti id, en, ja.</div></div>
+        <div><label class="lbl" id="smLbl">Jenis subtitle</label>
+          <div class="seg" role="radiogroup" aria-labelledby="smLbl">
+            <label><input type="radio" name="submode" value="burn"><span>Tertanam</span></label>
+            <label><input type="radio" name="submode" value="soft"><span>Track</span></label>
+            <label><input type="radio" name="submode" value="srt"><span>File .srt</span></label>
+          </div>
+          <p class="help" id="smHelp"></p></div>
+      </div>
+    </section>
+
+    <!-- 5. Hasil -->
+    <section class="card" aria-labelledby="h5">
+      <h2 id="h5"><span class="step">5</span>Kualitas &amp; opsi</h2>
+      <div class="seg" role="radiogroup" aria-label="Kualitas" style="grid-auto-flow:row;grid-template-columns:repeat(3,1fr)">
+        {% for q, label in qualities %}<label><input type="radio" name="quality" value="{{ q }}"><span>{{ label }}</span></label>{% endfor %}
+      </div>
+      <div class="msg warn" id="qualMsg"></div>
+      <label class="switch" style="margin-top:6px"><input type="checkbox" id="precise"><span class="knob"></span><span class="t">Potong presisi<small id="preciseHelp">Render ulang titik potong agar tepat di detik yang diminta (video biasa).</small></span></label>
+      <label class="switch"><input type="checkbox" id="test"><span class="knob"></span><span class="t">Mode uji<small>Hanya {{ defaults.test_seconds|int }} detik pertama dari rentang, hemat kuota untuk mencoba pengaturan.</small></span></label>
+    </section>
   </div>
-  <div class="row">
-    <div><label>Frame</label>
-      <select id="frame">
-        {% for f in frames %}<option value="{{ f }}"{{ ' selected' if f == default_frame else '' }}>{{ {'original':'Original','tiktok':'TikTok (9:16)','reels':'Instagram Reels (9:16)','shorts':'YouTube Shorts (9:16)','instagram':'Instagram feed (4:5)','square':'Persegi (1:1)','youtube':'YouTube (16:9)','twitter':'X / Twitter (16:9)','cinema':'Sinema (21:9)'}[f] }}</option>{% endfor %}
-        <option value="custom"{{ ' selected' if default_frame == 'custom' else '' }}>Kustom...</option>
-      </select></div>
-    <div><label>Isi frame</label>
-      <select id="fit">
-        <option value="blur"{{ ' selected' if default_fit == 'blur' else '' }}>Latar buram</option>
-        <option value="crop"{{ ' selected' if default_fit == 'crop' else '' }}>Potong tengah</option>
-        <option value="pad"{{ ' selected' if default_fit == 'pad' else '' }}>Bingkai hitam</option>
-      </select></div>
-  </div>
-  <input id="customFrame" placeholder="mis. 3:4 atau 720x1280" value="{{ custom_frame if default_frame == 'custom' else '' }}" style="display:{{ 'block' if default_frame == 'custom' else 'none' }};margin-top:8px">
-  <div class="row">
-    <div><label>Subtitle</label>
-      <select id="subs">
-        <option value="off"{{ ' selected' if default_subs == 'off' else '' }}>Tanpa subtitle</option>
-        <option value="auto"{{ ' selected' if default_subs == 'auto' else '' }}>Otomatis (caption YouTube / AI)</option>
-        <option value="youtube"{{ ' selected' if default_subs == 'youtube' else '' }}>Caption YouTube saja</option>
-        <option value="whisper"{{ ' selected' if default_subs == 'whisper' else '' }}>Transkripsi AI (Whisper)</option>
-      </select></div>
-    <div><label>Bahasa subtitle</label><input id="subLang" value="{{ default_sub_lang }}" placeholder="auto / id / en"></div>
-  </div>
-  <label>Jenis subtitle</label>
-  <select id="subMode">
-    <option value="burn"{{ ' selected' if default_sub_mode == 'burn' else '' }}>Tertanam di video</option>
-    <option value="soft"{{ ' selected' if default_sub_mode == 'soft' else '' }}>Track terpisah (bisa dimatikan)</option>
-    <option value="srt"{{ ' selected' if default_sub_mode == 'srt' else '' }}>File .srt terpisah</option>
-  </select>
-  <label>Kualitas</label>
-  <select id="quality">
-    {% for q in qualities %}<option value="{{ q }}"{{ ' selected' if q == default_quality else '' }}>{{ 'Hanya audio (mp3)' if q == 'audio' else ('Terbaik' if q == 'best' else q + 'p') }}</option>{% endfor %}
-  </select>
-  <label class="chk"><input type="checkbox" id="precise"{{ " checked" if default_precise else "" }}> Potong presisi (render ulang titik potong, lebih lambat)</label>
-  <label class="chk"><input type="checkbox" id="test"> Mode uji: hanya 10 detik pertama (hemat kuota)</label>
-  <div id="liveNote" style="display:none;font-size:.85rem;color:var(--mut);margin-top:10px">Terdeteksi livestream: hanya segmen yang dibutuhkan yang diunduh. Waktu mengikuti timeline player (DVR harus aktif), atau relatif ke sekarang: mulai <b>-1:30</b>, akhir <b>0:00</b>. Hasil selalu dirender ulang.</div>
-  <button id="btnClip">Potong &amp; Render</button>
-  <div id="status"></div>
+
+  <aside class="stack side" aria-label="Ringkasan dan hasil">
+    <section class="card" id="cardRun">
+      <h2>Ringkasan</h2>
+      <dl class="sum" id="sum">
+        <div><dt>Video</dt><dd id="sVideo">Belum ada link</dd></div>
+        <div><dt>Bagian</dt><dd id="sRange">-</dd></div>
+        <div><dt>Frame</dt><dd id="sFrame">-</dd></div>
+        <div><dt>Subtitle</dt><dd id="sSubs">-</dd></div>
+        <div><dt>Kualitas</dt><dd id="sQual">-</dd></div>
+      </dl>
+      <button type="button" class="btn cta-side" data-run id="btnRun"><svg class="ic"><use href="#i-scissors"/></svg><span class="spin" aria-hidden="true"></span><span class="lbl2">Potong &amp; Render</span></button>
+      <div class="banner err" id="runErr" role="alert" hidden><svg class="ic"><use href="#i-alert"/></svg><span id="runErrText"></span></div>
+    </section>
+
+    <section class="card" id="cardProg" hidden aria-live="polite">
+      <h2>Proses</h2>
+      <div class="steps" id="steps">
+        <div class="stp" data-s="queued"><span class="dot"><span class="n">1</span><svg class="ic"><use href="#i-check"/></svg></span>Antre</div>
+        <div class="stp" data-s="download"><span class="dot"><span class="n">2</span><svg class="ic"><use href="#i-check"/></svg></span>Unduh</div>
+        <div class="stp" data-s="process"><span class="dot"><span class="n">3</span><svg class="ic"><use href="#i-check"/></svg></span>Proses</div>
+      </div>
+      <div class="bar" id="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><i id="barFill"></i></div>
+      <div class="pmsg"><span id="progText">Memulai...</span><span id="elapsed">0:00</span></div>
+      <div class="notes" id="notes"></div>
+    </section>
+
+    <section class="card" id="cardRes" hidden>
+      <h2><svg class="ic" style="color:var(--ok)"><use href="#i-check"/></svg>Selesai</h2>
+      <div id="playerBox"></div>
+      <div class="rmeta"><b id="rName"></b><span id="rSize"></span></div>
+      <div class="notes" id="resNotes" style="margin:-4px 0 12px"></div>
+      <div class="btnrow" id="dlRow"></div>
+      <button type="button" class="btn sec restart" id="btnAgain"><svg class="ic"><use href="#i-refresh"/></svg>Potong bagian lain</button>
+    </section>
+
+    <section class="card" id="cardHist">
+      <div class="hhead"><h2><svg class="ic"><use href="#i-clock"/></svg>Riwayat</h2><button type="button" class="iconbtn tiny" id="histClear" hidden>Hapus semua</button></div>
+      <ul class="hlist" id="hlist"></ul>
+      <p class="hempty" id="hempty">Belum ada klip. Hasil terbaru akan muncul di sini.</p>
+    </section>
+  </aside>
+</main>
+
+<div class="actionbar" id="actionbar">
+  <div class="abinfo"><b id="abTitle">Siap memotong</b><span id="abSub">Lengkapi link dan waktu</span></div>
+  <button type="button" class="btn" data-run id="btnRun2"><svg class="ic"><use href="#i-scissors"/></svg><span class="spin" aria-hidden="true"></span><span class="lbl2">Potong</span></button>
 </div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
 <script>
-const $ = id => document.getElementById(id);
-const post = (u, b) => fetch(u, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)}).then(async r => ({ok:r.ok, data:await r.json()}));
-const setStatus = (t, c='') => { $('status').className = c; $('status').innerHTML = t; };
-const fmt = s => { s=Math.round(s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0'); };
+(function () {
+  'use strict';
+  var D = {{ defaults|tojson }};
+  var FRAMES = {{ frames_json|tojson }};
+  var QUAL = {{ dict(qualities)|tojson }};
+  var $ = function (id) { return document.getElementById(id); };
+  var qa = function (s) { return Array.prototype.slice.call(document.querySelectorAll(s)); };
 
-$('frame').onchange = () => { $('customFrame').style.display = $('frame').value === 'custom' ? 'block' : 'none'; };
-$('btnInfo').onclick = async () => {
-  if (!$('url').value.trim()) return;
-  setStatus('Mengambil info...');
-  const {ok, data} = await post('/api/info', {url:$('url').value.trim()});
-  if (!ok) return setStatus(data.error, 'err');
-  $('info').innerHTML = `<div class="info">${data.thumbnail?`<img src="${data.thumbnail}">`:''}<div><b>${data.title}</b><br>${data.uploader||''} · ${data.duration?fmt(data.duration):''}${data.live_status==='is_live'?' · <span class="err">🔴 LIVE</span>':''}</div></div>`;
-  $('liveNote').style.display = (data.live_status==='is_live'||data.live_status==='post_live') ? 'block' : 'none';
-  setStatus('');
-};
+  /* ------------------------------------------------ util */
+  var storeGet = function (k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
+  var storeSet = function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+  var val = function (name) { var el = document.querySelector('input[name="' + name + '"]:checked'); return el ? el.value : ''; };
+  var setVal = function (name, v) { var el = document.querySelector('input[name="' + name + '"][value="' + v + '"]'); if (el) el.checked = true; };
+  var esc = function (t) { return String(t).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+  var icon = function (n, cls) { return '<svg class="ic ' + (cls || '') + '"><use href="#i-' + n + '"/></svg>'; };
+  var fmt = function (s) {
+    s = Math.max(0, Math.round(s)); var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+    return h ? h + ':' + String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0') : m + ':' + String(x).padStart(2, '0');
+  };
+  var fmtSize = function (b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; };
+  var toastTimer;
+  function toast(msg, err) {
+    var t = $('toast'); t.textContent = msg; t.className = 'toast show' + (err ? ' err' : '');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.className = 'toast'; }, 3200);
+  }
+  function api(url, opts) {
+    return fetch(url, opts).then(function (r) {
+      if (r.status === 401) { var e = new Error('expired'); e.expired = true; throw e; }
+      return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; });
+    });
+  }
+  var post = function (u, b, signal) { return api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b), signal: signal }); };
+  var expiredHtml = 'Sesi berakhir. <a href="/login">Masuk lagi</a>';
 
-$('btnClip').onclick = async () => {
-  $('btnClip').disabled = true; setStatus('Memulai...');
-  const {ok, data} = await post('/api/clip', {
-    url:$('url').value.trim(), start:$('start').value, end:$('end').value,
-    quality:$('quality').value, precise:$('precise').checked, test:$('test').checked,
-    frame: $('frame').value === 'custom' ? $('customFrame').value.trim() : $('frame').value,
-    fit:$('fit').value, subs:$('subs').value, sub_lang:$('subLang').value.trim() || 'auto', sub_mode:$('subMode').value });
-  if (!ok) { $('btnClip').disabled = false; return setStatus(data.error, 'err'); }
-  const timer = setInterval(async () => {
-    const j = await (await fetch('/api/job/' + data.job_id)).json();
-    const notes = (j.notes||[]).map(n => `<div class="${n.level==='warning'?'err':''}" style="font-size:.85rem">${n.level==='warning'?'⚠️':'ℹ️'} ${n.text}</div>`).join('');
-    if (j.status === 'queued' || j.status === 'running') setStatus('⏳ ' + (j.progress || '...') + notes);
-    else { clearInterval(timer); $('btnClip').disabled = false;
-      if (j.status === 'done') setStatus(`<span class="ok">Selesai: ${j.name}</span>${notes}<a class="dl" href="/download/${data.job_id}">Unduh hasil</a>` +
-        (j.has_srt ? `<a class="dl" style="background:#4f8cff;color:#fff" href="/download/${data.job_id}/srt">Unduh subtitle (.srt)</a>` : ''));
-      else setStatus(j.error + notes, 'err'); }
-  }, 1000);
-};
+  /* ------------------------------------------------ waktu (cermin aturan server) */
+  function isRel(v) { v = (v || '').trim().toLowerCase(); return v[0] === '-' || v === 'now' || v === 'live' || v === 'sekarang'; }
+  function parseT(v) {
+    v = (v || '').trim().toLowerCase();
+    if (!v) throw new Error('kosong');
+    if (v === 'now' || v === 'live' || v === 'sekarang') return 0;
+    if (v[0] === '-') return -parseT(v.slice(1));
+    var m = v.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s?)?$/);
+    if (m && /[hms]/.test(v) && (m[1] || m[2] || m[3])) return (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0);
+    var p = v.split(':');
+    if (p.length > 3 || !p.every(function (x) { return /^\d+(\.\d+)?$/.test(x); })) throw new Error('format');
+    return p.reduce(function (a, x) { return a * 60 + parseFloat(x); }, 0);
+  }
+  function fmtAgo(s) { return s === 0 ? 'sekarang' : fmt(-s) + ' lalu'; }
+
+  /* ------------------------------------------------ state */
+  var S = { duration: null, live: false, info: null, url: '', job: null, timer: null, t0: 0, range: null, busy: false };
+
+  /* ------------------------------------------------ rentang waktu */
+  function validateRange() {
+    var a = $('start').value, b = $('end').value, box = $('rinfo'), txt = $('rinfoText');
+    var bad = function (msg, which) {
+      box.className = 'rinfo err'; txt.textContent = msg; S.range = null;
+      $('start').classList.toggle('bad', which !== 'end'); $('end').classList.toggle('bad', which !== 'start');
+      box.querySelector('use').setAttribute('href', '#i-alert');
+    };
+    $('start').classList.remove('bad'); $('end').classList.remove('bad');
+    box.querySelector('use').setAttribute('href', '#i-clock');
+    if (!a.trim() && !b.trim()) { box.className = 'rinfo'; txt.textContent = 'Isi waktu mulai dan akhir, mis. 1:30 dan 2:00.'; S.range = null; return; }
+    var t0, t1;
+    try { t0 = parseT(a); } catch (e) { return bad(a.trim() ? 'Format waktu mulai tidak valid. Contoh: 1:30, 01:02:03, 90, 1m30s' : 'Isi waktu mulai.', 'start'); }
+    try { t1 = parseT(b); } catch (e) { return bad(b.trim() ? 'Format waktu akhir tidak valid. Contoh: 2:45, 90, 1m30s' : 'Isi waktu akhir.', 'end'); }
+    var ra = isRel(a), rb = isRel(b), rel = ra || rb;
+    if (rel && ((!ra && t0 !== 0) || (!rb && t1 !== 0))) return bad('Pakai waktu relatif untuk keduanya (mulai -1:30, akhir 0:00) atau waktu absolut untuk keduanya.');
+    if (t1 <= t0) return bad('Waktu akhir harus lebih besar dari waktu mulai.', 'end');
+    if (!rel && S.duration && !S.live && t1 > S.duration + 0.5) return bad('Melewati durasi video (' + fmt(S.duration) + ').', 'end');
+    var len = t1 - t0;
+    if (D.max_clip && len > D.max_clip && !$('test').checked) return bad('Durasi klip ' + fmt(len) + ' melebihi batas server (' + fmt(D.max_clip) + ').');
+    S.range = { t0: t0, t1: t1, rel: rel, len: len };
+    box.className = 'rinfo ok';
+    txt.innerHTML = rel ? 'Dari <b>' + fmtAgo(t0) + '</b> sampai <b>' + fmtAgo(t1) + '</b> · durasi klip <b>' + fmt(len) + '</b>'
+                        : 'Durasi klip <b>' + fmt(len) + '</b> (' + fmt(t0) + ' - ' + fmt(t1) + ')';
+    if (!rel && S.duration && !S.live) syncSliders(t0, t1);
+    markChips();
+  }
+  function markChips() {
+    var a = $('start').value.trim(), b = $('end').value.trim(), len = S.range ? S.range.len : -1, s0 = S.range ? S.range.t0 : -1;
+    qa('#chipsLive .chip').forEach(function (c) { c.classList.toggle('on', !!S.range && S.range.rel && S.range.t1 === 0 && Math.round(-S.range.t0) === +c.getAttribute('data-last')); });
+    qa('#chipsVod .chip').forEach(function (c) { c.classList.toggle('on', !!S.range && !S.range.rel && Math.round(len) === +c.getAttribute('data-len')); });
+  }
+  function syncSliders(t0, t1) {
+    var d = S.duration; if (!d) return;
+    $('rs').value = Math.min(t0, d); $('re').value = Math.min(t1, d);
+    $('fill').style.left = (t0 / d * 100) + '%'; $('fill').style.right = (100 - Math.min(t1, d) / d * 100) + '%';
+  }
+  function onSlider(which) {
+    var s = +$('rs').value, e = +$('re').value;
+    if (which === 'rs' && s >= e) { s = Math.max(0, e - 1); $('rs').value = s; }
+    if (which === 're' && e <= s) { e = Math.min(S.duration, s + 1); $('re').value = e; }
+    $('start').value = fmt(s); $('end').value = fmt(e); validateRange(); refresh(true);
+  }
+
+  /* ------------------------------------------------ info video */
+  var infoCtl, infoTimer;
+  function validUrl(u) { return /^https?:\/\/\S+\.\S+/i.test((u || '').trim()); }
+  function urlChanged(immediate) {
+    var u = $('url').value.trim();
+    $('btnClear').hidden = !u; $('btnPaste').hidden = !!u;
+    clearTimeout(infoTimer);
+    if (!u) { resetInfo(); setUrlMsg('', ''); refresh(); return; }
+    if (!validUrl(u)) { resetInfo(); setUrlMsg('Link harus diawali http:// atau https://', 'err'); refresh(); return; }
+    setUrlMsg('', '');
+    if (u === S.url) { refresh(); return; }
+    infoTimer = setTimeout(function () { fetchInfo(u); }, immediate ? 0 : 650);
+    refresh();
+  }
+  function setUrlMsg(t, c) { var m = $('urlMsg'); m.textContent = t; m.className = 'msg' + (c ? ' ' + c : ''); $('url').classList.toggle('bad', c === 'err'); }
+  function resetInfo() {
+    if (infoCtl) infoCtl.abort();
+    S.url = ''; S.info = null; S.duration = null; S.live = false;
+    $('preview').hidden = true; $('skeleton').hidden = true; layoutRange();
+  }
+  function fetchInfo(u) {
+    if (infoCtl) infoCtl.abort(); infoCtl = new AbortController();
+    $('preview').hidden = true; $('skeleton').hidden = false; setUrlMsg('Membaca info video...', '');
+    post('/api/info', { url: u }, infoCtl.signal).then(function (r) {
+      $('skeleton').hidden = true;
+      if (!r.ok) { S.url = ''; setUrlMsg((r.data.error || 'Info video tidak bisa dibaca') + ' Anda tetap bisa mencoba memotong.', 'warn'); refresh(); return; }
+      var d = r.data; S.url = u; S.info = d; S.live = d.live_status === 'is_live' || d.live_status === 'post_live';
+      S.duration = !S.live && d.duration ? d.duration : null;
+      $('ptitle').textContent = d.title || 'Tanpa judul'; $('puploader').textContent = d.uploader || '';
+      var im = $('pthumb'); im.style.display = ''; if (d.thumbnail) { im.src = d.thumbnail; } else { im.removeAttribute('src'); }
+      im.onerror = function () { im.style.display = 'none'; };
+      $('plive').hidden = d.live_status !== 'is_live';
+      $('pdur').hidden = !S.duration; if (S.duration) $('pdur').textContent = fmt(S.duration);
+      $('preview').hidden = false;
+      setUrlMsg(d.live_status === 'is_upcoming' ? 'Stream ini belum dimulai.' : '', d.live_status === 'is_upcoming' ? 'warn' : '');
+      layoutRange(true); validateRange(); refresh();
+    }).catch(function (e) {
+      if (e.name === 'AbortError') return;
+      $('skeleton').hidden = true;
+      if (e.expired) return setUrlMsg('', ''), showRunErr(expiredHtml, true);
+      setUrlMsg('Gagal menghubungi server.', 'err');
+    });
+  }
+  function layoutRange(prefill) {
+    var vod = !!S.duration, live = S.live;
+    $('range').hidden = !vod; $('ticks').hidden = !vod; $('chipsVod').hidden = !vod; $('chipsLive').hidden = !live; $('liveHelp').hidden = !live;
+    if (vod) {
+      $('rs').max = $('re').max = S.duration; $('tickEnd').textContent = fmt(S.duration);
+    }
+    if (prefill && !$('start').value.trim() && !$('end').value.trim()) {
+      if (live) { $('start').value = '-1:00'; $('end').value = '0:00'; }
+      else if (vod) { $('start').value = '0:00'; $('end').value = fmt(Math.min(30, S.duration)); }
+    }
+    validateRange();
+  }
+
+  /* ------------------------------------------------ tampilan & ringkasan */
+  var FIT_HELP = {
+    blur: 'Video utuh di tengah, latar diisi versi buram. Tidak ada bagian yang terpotong.',
+    crop: 'Frame terisi penuh dengan memotong sisi video. Atur fokus untuk memilih bagian yang dipertahankan.',
+    pad: 'Video utuh dengan bingkai hitam di sisi yang kosong.' };
+  var SUBS_HELP = {
+    off: 'Klip dibuat tanpa subtitle.',
+    auto: 'Memakai caption YouTube bila ada, jika tidak ditranskripsi AI. Bahasa dideteksi otomatis.',
+    youtube: 'Hanya caption bawaan YouTube. Gagal bila video tidak punya caption.',
+    whisper: 'Transkripsi AI dari audio klip, bahasa dideteksi otomatis. Cocok untuk livestream dan video tanpa caption.' };
+  var SM_HELP = { burn: 'Teks menyatu dengan gambar, tampil di semua aplikasi (cocok untuk TikTok/Reels).',
+                  soft: 'Track terpisah di dalam MP4 yang bisa dimatikan pemutar.',
+                  srt: 'Video asli ditambah file .srt terpisah untuk diedit atau diunggah.' };
+  function frameInfo() {
+    var f = val('frame');
+    if (f === 'custom') return { label: 'Kustom ' + ($('customFrame').value.trim() || '?'), custom: true };
+    var o = FRAMES[f] || FRAMES.original;
+    return { label: o.label + (o.w ? ' · ' + o.w + '×' + o.h : ''), original: f === 'original' };
+  }
+  function refresh(skipSave) {
+    var f = val('frame'), subs = val('subs'), q = val('quality'), orig = f === 'original';
+    $('customBox').hidden = f !== 'custom';
+    var audio = q === 'audio';
+    $('fitBox').hidden = orig || audio; $('focusBox').hidden = val('fit') !== 'crop' || orig || audio;
+    $('fitHelp').textContent = FIT_HELP[val('fit')] || '';
+    $('subOpts').hidden = subs === 'off'; $('subsHelp').textContent = SUBS_HELP[subs] || '';
+    $('smHelp').textContent = audio ? 'Kualitas audio: subtitle selalu berupa file .srt terpisah.' : (SM_HELP[val('submode')] || '');
+    qa('input[name="submode"]').forEach(function (i) { i.disabled = audio; });
+    var qm = '';
+    if (!orig && (q === '360' || q === '480')) qm = 'Frame berukuran besar akan memperbesar video ' + q + 'p, hasil bisa buram. Pilih 720p ke atas.';
+    $('qualMsg').textContent = qm;
+    var forced = subs !== 'off' || S.live;
+    $('precise').disabled = forced;
+    $('preciseHelp').textContent = forced ? (S.live ? 'Livestream selalu dipotong presisi.' : 'Otomatis aktif saat subtitle dipakai agar waktunya sinkron.')
+                                          : 'Render ulang titik potong agar tepat di detik yang diminta (video biasa).';
+    // ringkasan
+    $('sVideo').textContent = S.info ? (S.info.title || 'Video') : ($('url').value.trim() ? 'Link dimasukkan' : 'Belum ada link');
+    $('sRange').textContent = S.range ? (S.range.rel ? fmtAgo(S.range.t0) + ' → ' + fmtAgo(S.range.t1) : fmt(S.range.t0) + ' → ' + fmt(S.range.t1)) + ' (' + fmt(S.range.len) + ')' : '-';
+    var fi = frameInfo(); $('sFrame').textContent = audio ? 'Audio saja' : fi.label + (fi.original ? '' : ' · ' + { blur: 'latar buram', crop: 'potong', pad: 'bingkai' }[val('fit')]);
+    $('sSubs').textContent = subs === 'off' ? 'Tanpa subtitle' : { auto: 'Otomatis', youtube: 'Caption YouTube', whisper: 'Whisper AI' }[subs] + ' · ' + ($('subLang').value.trim() || 'auto') + ' · ' + (audio ? '.srt' : { burn: 'tertanam', soft: 'track', srt: '.srt' }[val('submode')]);
+    $('sQual').textContent = (QUAL[q] || q) + ($('test').checked ? ' · mode uji' : '');
+    var ready = validUrl($('url').value) && !!S.range && !customBad();
+    qa('[data-run]').forEach(function (b) { b.disabled = !ready || S.busy; });
+    $('abTitle').textContent = S.range ? 'Klip ' + fmt(S.range.len) + (audio ? '' : ' · ' + (orig ? 'Asli' : (FRAMES[f] ? FRAMES[f].label : 'Kustom'))) : 'Siap memotong';
+    $('abSub').textContent = ready ? (subs === 'off' ? 'Tanpa subtitle' : 'Subtitle ' + subs) : (!validUrl($('url').value) ? 'Masukkan link video' : 'Lengkapi waktu mulai dan akhir');
+    if (!skipSave) savePrefs();
+  }
+  function customBad() {
+    if (val('frame') !== 'custom') return false;
+    var v = $('customFrame').value.trim().toLowerCase(), msg = $('customMsg'), ok = false;
+    var m;
+    if ((m = v.match(/^(\d{2,5})x(\d{2,5})$/))) ok = +m[1] >= 64 && +m[1] <= 4096 && +m[2] >= 64 && +m[2] <= 4096;
+    else if ((m = v.match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/))) ok = +m[1] > 0 && +m[2] > 0 && Math.max(+m[1] / +m[2], +m[2] / +m[1]) <= 4;
+    msg.textContent = !v ? 'Isi rasio (3:4) atau ukuran (720x1280).' : ok ? '' : 'Tidak valid. Contoh: 3:4, 9:16, atau 720x1280 (64-4096 piksel).';
+    msg.className = 'msg' + (v && !ok ? ' err' : '');
+    $('customFrame').classList.toggle('bad', !!v && !ok);
+    return !ok;
+  }
+  function savePrefs() {
+    storeSet('clipper.prefs', { frame: val('frame'), customFrame: $('customFrame').value, fit: val('fit'), focus: +$('focus').value, subs: val('subs'),
+      subLang: $('subLang').value, subMode: val('submode'), quality: val('quality'), precise: $('precise').checked });
+  }
+  function loadPrefs() {
+    var p = storeGet('clipper.prefs', null);
+    var o = p || { frame: D.frame, customFrame: D.custom_frame, fit: D.fit, focus: D.focus, subs: D.subs, subLang: D.sub_lang, subMode: D.sub_mode, quality: D.quality, precise: D.precise };
+    setVal('frame', FRAMES[o.frame] || o.frame === 'custom' ? o.frame : 'original');
+    $('customFrame').value = o.customFrame || ''; setVal('fit', o.fit || 'blur'); $('focus').value = o.focus == null ? 0.5 : o.focus;
+    setVal('subs', o.subs || 'off'); $('subLang').value = o.subLang || 'auto'; setVal('submode', o.subMode || 'burn');
+    setVal('quality', o.quality || 'best'); $('precise').checked = !!o.precise;
+  }
+
+  /* ------------------------------------------------ jalankan & pantau */
+  function showRunErr(html, raw) { $('runErrText').innerHTML = raw ? html : esc(html); $('runErr').hidden = !html; }
+  function setBusy(b) {
+    S.busy = b;
+    qa('[data-run]').forEach(function (btn) { btn.classList.toggle('loading', b); btn.querySelector('.lbl2').textContent = b ? 'Memproses...' : (btn.id === 'btnRun2' ? 'Potong' : 'Potong & Render'); });
+    refresh(true);
+  }
+  function payload() {
+    var f = val('frame');
+    return { url: $('url').value.trim(), start: $('start').value.trim(), end: $('end').value.trim(), quality: val('quality'),
+      precise: $('precise').checked, test: $('test').checked, frame: f === 'custom' ? $('customFrame').value.trim() : f, fit: val('fit'),
+      focus: +$('focus').value, subs: val('subs'), sub_lang: ($('subLang').value.trim() || 'auto').toLowerCase(), sub_mode: val('submode') };
+  }
+  function run() {
+    if (S.busy) return;
+    validateRange(); if (!S.range) { toast('Periksa waktu mulai dan akhir', true); $('start').focus(); return; }
+    showRunErr('', true); $('cardRes').hidden = true; setBusy(true);
+    post('/api/clip', payload()).then(function (r) {
+      if (!r.ok) { setBusy(false); return showRunErr(r.data.error || 'Permintaan ditolak'); }
+      S.job = r.data.job_id; S.t0 = Date.now(); showProgress({ status: 'queued', stage: 'queued', percent: null, progress: 'Menunggu antrean...', notes: [] });
+      $('cardProg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      clearInterval(S.timer); S.timer = setInterval(poll, 1000); poll();
+    }).catch(function (e) { setBusy(false); if (e.expired) showRunErr(expiredHtml, true); else showRunErr('Gagal menghubungi server.'); });
+  }
+  function poll() {
+    if (!S.job) return;
+    var id = S.job;
+    api('/api/job/' + id).then(function (r) {
+      if (id !== S.job) return;
+      if (!r.ok) { clearInterval(S.timer); setBusy(false); $('cardProg').hidden = true; return showRunErr('Job tidak ditemukan. Server mungkin dimulai ulang.'); }
+      var j = r.data; $('elapsed').textContent = fmt((Date.now() - S.t0) / 1000);
+      if (j.status === 'done') { clearInterval(S.timer); showProgress(j, true); setBusy(false); addHistory(id, j); showResult(id, j); }
+      else if (j.status === 'error') { clearInterval(S.timer); setBusy(false); $('cardProg').hidden = true; showRunErr(j.error || 'Proses gagal'); renderNotes('notes', j.notes); }
+      else showProgress(j);
+    }).catch(function (e) { if (e.expired) { clearInterval(S.timer); setBusy(false); showRunErr(expiredHtml, true); } });
+  }
+  var ORDER = ['queued', 'download', 'process'];
+  function showProgress(j, done) {
+    $('cardProg').hidden = false;
+    var idx = done ? 3 : Math.max(0, ORDER.indexOf(j.stage));
+    qa('#steps .stp').forEach(function (el, i) { el.classList.toggle('done', i < idx); el.classList.toggle('on', i === idx); });
+    var bar = $('bar'), fill = $('barFill');
+    var p = done ? 100 : (j.stage === 'download' && j.percent != null ? j.percent : null);
+    bar.classList.toggle('ind', p == null && !done);
+    if (p != null) { fill.style.width = p + '%'; bar.setAttribute('aria-valuenow', Math.round(p)); } else { fill.style.width = ''; bar.removeAttribute('aria-valuenow'); }
+    $('progText').textContent = done ? 'Selesai' : (j.progress || '...');
+    renderNotes('notes', j.notes);
+  }
+  function renderNotes(id, notes) {
+    $(id).innerHTML = (notes || []).map(function (n) { return '<div class="note ' + esc(n.level) + '">' + icon(n.level === 'warning' ? 'alert' : 'info') + '<span>' + esc(n.text) + '</span></div>'; }).join('');
+  }
+  function showResult(id, j) {
+    $('cardRes').hidden = false;
+    var audio = j.kind === 'audio';
+    $('playerBox').innerHTML = audio ? '<audio class="audio" controls preload="metadata" src="/media/' + id + '"></audio>'
+                                     : '<video class="player" controls playsinline preload="metadata" src="/media/' + id + '"></video>';
+    $('rName').textContent = j.name || ''; $('rSize').textContent = j.size ? fmtSize(j.size) : '';
+    renderNotes('resNotes', j.notes);
+    var row = '<a class="btn ok" href="/download/' + id + '" download>' + icon('download') + 'Unduh ' + (audio ? 'audio' : 'video') + '</a>';
+    if (j.has_srt) row += '<a class="btn sec" href="/download/' + id + '/srt" download>' + icon('caption') + 'Unduh subtitle (.srt)</a>';
+    $('dlRow').innerHTML = row; $('dlRow').className = 'btnrow' + (j.has_srt ? ' two' : '');
+    $('cardRes').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  /* ------------------------------------------------ riwayat */
+  function hist() { return storeGet('clipper.history', []); }
+  function addHistory(id, j) {
+    var h = hist().filter(function (x) { return x.id !== id; });
+    h.unshift({ id: id, name: j.name, kind: j.kind, size: j.size, srt: !!j.has_srt, ts: Date.now() }); storeSet('clipper.history', h.slice(0, 8)); renderHistory(true);
+  }
+  function ago(ts) { var s = (Date.now() - ts) / 1000; return s < 60 ? 'baru saja' : s < 3600 ? Math.floor(s / 60) + ' mnt lalu' : s < 86400 ? Math.floor(s / 3600) + ' jam lalu' : Math.floor(s / 86400) + ' hari lalu'; }
+  function renderHistory(verify) {
+    var h = hist(), ul = $('hlist');
+    $('hempty').hidden = h.length > 0; $('histClear').hidden = h.length === 0;
+    ul.innerHTML = h.map(function (x) {
+      return '<li class="hitem' + (x.gone ? ' gone' : '') + '" data-id="' + esc(x.id) + '">' + icon(x.kind === 'audio' ? 'play' : 'film') +
+        '<div class="hn"><b title="' + esc(x.name || '') + '">' + esc(x.name || 'Klip') + '</b><small>' + ago(x.ts) + (x.gone ? ' · kedaluwarsa' : x.size ? ' · ' + fmtSize(x.size) : '') + '</small></div>' +
+        (x.gone ? '' : '<button type="button" class="iconbtn" data-act="play" aria-label="Putar" title="Putar">' + icon('play') + '</button><a class="iconbtn" href="/download/' + esc(x.id) + '" download aria-label="Unduh" title="Unduh">' + icon('download') + '</a>') +
+        '<button type="button" class="iconbtn" data-act="del" aria-label="Hapus dari riwayat" title="Hapus">' + icon('trash') + '</button></li>';
+    }).join('');
+    if (verify) return;
+    h.forEach(function (x) {   // tandai yang sudah tidak ada di server
+      api('/api/job/' + x.id).then(function (r) { if (!r.ok && !x.gone) { x.gone = true; storeSet('clipper.history', h); renderHistory(true); } }).catch(function () {});
+    });
+  }
+  $('hlist').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-act]'); if (!btn) return;
+    var li = btn.closest('.hitem'), id = li.getAttribute('data-id');
+    if (btn.getAttribute('data-act') === 'del') { storeSet('clipper.history', hist().filter(function (x) { return x.id !== id; })); renderHistory(true); return; }
+    var it = hist().filter(function (x) { return x.id === id; })[0];
+    if (it) showResult(id, { name: it.name, kind: it.kind, size: it.size, has_srt: it.srt, notes: [] });
+  });
+  $('histClear').addEventListener('click', function () { storeSet('clipper.history', []); renderHistory(true); toast('Riwayat dihapus'); });
+
+  /* ------------------------------------------------ event */
+  $('url').addEventListener('input', function () { urlChanged(false); });
+  $('url').addEventListener('paste', function () { setTimeout(function () { urlChanged(true); }, 0); });
+  $('url').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); urlChanged(true); $('start').focus(); } });
+  $('btnClear').addEventListener('click', function () { $('url').value = ''; urlChanged(true); $('url').focus(); });
+  $('btnPaste').addEventListener('click', function () {
+    if (!navigator.clipboard || !navigator.clipboard.readText) return toast('Browser tidak mengizinkan akses clipboard. Tempel manual (Ctrl+V).', true);
+    navigator.clipboard.readText().then(function (t) { $('url').value = (t || '').trim(); urlChanged(true); if (!t) toast('Clipboard kosong', true); })
+      .catch(function () { toast('Izin clipboard ditolak. Tempel manual (Ctrl+V).', true); });
+  });
+  ['start', 'end'].forEach(function (id) { $(id).addEventListener('input', function () { validateRange(); refresh(true); }); });
+  $('rs').addEventListener('input', function () { onSlider('rs'); }); $('re').addEventListener('input', function () { onSlider('re'); });
+  $('chipsVod').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-len]'); if (!b) return;
+    var s = 0; try { s = Math.max(0, parseT($('start').value)); } catch (x) {}
+    $('start').value = fmt(s); $('end').value = fmt(Math.min(s + +b.getAttribute('data-len'), S.duration || 1e9)); validateRange(); refresh(true);
+  });
+  $('chipsLive').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-last]'); if (!b) return;
+    $('start').value = '-' + fmt(+b.getAttribute('data-last')); $('end').value = '0:00'; validateRange(); refresh(true);
+  });
+  qa('input[name], #customFrame, #subLang, #focus, #precise, #test').forEach(function (el) { el.addEventListener('input', function () { validateRange(); refresh(); }); el.addEventListener('change', function () { validateRange(); refresh(); }); });
+  qa('[data-run]').forEach(function (b) { b.addEventListener('click', run); });
+  $('btnAgain').addEventListener('click', function () { $('cardRes').hidden = true; $('cardProg').hidden = true; window.scrollTo({ top: 0, behavior: 'smooth' }); $('start').focus({ preventScroll: true }); });
+  document.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); if (!qa('[data-run]')[0].disabled) run(); } });
+  $('themeBtn').addEventListener('click', function () {
+    var root = document.documentElement, cur = root.getAttribute('data-theme');
+    var sysLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+    var next = (cur || (sysLight ? 'light' : 'dark')) === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next); try { localStorage.setItem('clipper.theme', next); } catch (e) {}
+    var m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = next === 'dark' ? '#0b0d12' : '#eef2fb';
+  });
+
+  /* ------------------------------------------------ mulai */
+  loadPrefs(); renderHistory(false); validateRange(); urlChanged(true); refresh(true);
+})();
 </script>
 </body>
 </html>

@@ -184,16 +184,41 @@ def _model(name: str, device: str, compute: str, root: Optional[str]):
     return WhisperModel(name, device=device, compute_type=compute, download_root=root)
 
 
+def _load_wav(path: Path):
+    """WAV mono 16 kHz 16-bit (dibuat ffmpeg) -> array float32.
+
+    Dikirim langsung ke Whisper sehingga faster-whisper tidak perlu men-decode lewat PyAV
+    (versi PyAV yang tidak cocok adalah penyebab error 'metadata_errors'). Tanpa numpy: kembalikan path.
+    """
+    try:
+        import numpy as np
+    except ImportError:
+        return str(path)
+    import wave
+    try:
+        with wave.open(str(path), "rb") as w:
+            if (w.getnchannels(), w.getsampwidth(), w.getframerate()) != (1, 2, 16000):
+                raise SubtitleError("Format audio untuk Whisper harus mono 16 kHz 16-bit")
+            raw = w.readframes(w.getnframes())
+    except (wave.Error, EOFError) as e:
+        raise SubtitleError(f"Audio untuk Whisper tidak terbaca: {e}") from e
+    return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+
+
 def transcribe(wav_path: Path, lang: str) -> tuple[list[Cue], str]:
     """Transkripsi dengan faster-whisper. lang='auto' -> bahasa dideteksi otomatis."""
     cfg = config.get()
     model = _model(cfg.whisper_model, cfg.whisper_device, cfg.whisper_compute, cfg.whisper_dir)
+    audio = _load_wav(wav_path)
     try:
-        segs, info = model.transcribe(str(wav_path), language=None if lang == "auto" else lang,
+        segs, info = model.transcribe(audio, language=None if lang == "auto" else lang,
                                       vad_filter=True, beam_size=5)
         cues = [Cue(float(s.start), float(s.end), s.text.strip()) for s in segs if s.text.strip()]
     except Exception as e:  # noqa: BLE001
-        raise SubtitleError(f"Transkripsi Whisper gagal: {e}") from e
+        hint = ""
+        if "metadata_errors" in str(e) or "av.open" in str(e):
+            hint = " (PyAV tidak cocok dengan faster-whisper: jalankan pip install 'av>=12,<19' lalu coba lagi)"
+        raise SubtitleError(f"Transkripsi Whisper gagal: {e}{hint}") from e
     return cues, getattr(info, "language", lang)
 
 

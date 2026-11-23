@@ -217,7 +217,8 @@ def main():
             def __init__(self, *a, **k): pass
             def transcribe(self, path, language=None, vad_filter=True, beam_size=5):
                 calls["language"] = language
-                calls["wav_dur"] = duration(Path(path))
+                calls["is_array"] = not isinstance(path, (str, Path))  # tanpa PyAV: harus array
+                calls["wav_dur"] = len(path) / 16000 if calls["is_array"] else duration(Path(path))
                 segs = [SimpleNamespace(start=1.0, end=3.0, text=" halo semua selamat datang "),
                         SimpleNamespace(start=5.0, end=6.0, text="")]
                 return iter(segs), SimpleNamespace(language="id", language_probability=0.97)
@@ -234,6 +235,7 @@ def main():
         ok &= check("frame tiktok 1080x1920", _r.probe_size(burned) == (1080, 1920), str(_r.probe_size(burned)))
         ok &= check("nama file memuat tag frame", "[tiktok]" in burned.name, burned.name)
         ok &= check("bahasa auto -> Whisper language=None", calls.get("language") is None, str(calls))
+        ok &= check("audio dikirim sebagai array (tanpa PyAV)", calls.get("is_array") is True, str(calls.get("is_array")))
         ok &= check("audio ke Whisper = durasi klip", abs(calls.get("wav_dur", 0) - 10) < 0.3, f"{calls.get('wav_dur'):.2f}s")
         ok &= check("bahasa terdeteksi dilaporkan", any("terdeteksi 'id'" in m.get("message", "") for m in msgs if m.get("status") == "message"))
 

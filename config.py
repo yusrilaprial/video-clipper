@@ -178,6 +178,11 @@ class Config:
     # deployment (web)
     auth_user: Optional[str]
     auth_password: Optional[str]
+    secret_key: Optional[str]
+    cookie_secure: bool
+    trust_proxy: bool
+    login_max_attempts: int
+    login_lock_seconds: int
     max_jobs: int
     max_clip_seconds: int
     retention_hours: float
@@ -244,6 +249,11 @@ def load() -> Config:
         port=e.int("PORT", 5000, 1, 65535),
         auth_user=e.str("AUTH_USER"),
         auth_password=e.str("AUTH_PASSWORD"),
+        secret_key=e.str("SECRET_KEY"),
+        cookie_secure=e.bool("COOKIE_SECURE", False),
+        trust_proxy=e.bool("TRUST_PROXY", False),
+        login_max_attempts=e.int("LOGIN_MAX_ATTEMPTS", 5, 1, 100),
+        login_lock_seconds=e.int("LOGIN_LOCK_SECONDS", 300, 10, 86400),
         max_jobs=e.int("MAX_JOBS", 2, 1, 16),
         max_clip_seconds=e.int("MAX_CLIP_SECONDS", 0, 0, 86400),
         retention_hours=e.float("RETENTION_HOURS", 0.0, 0.0, 24 * 365),
@@ -275,8 +285,9 @@ def reload() -> Config:
 def describe(c: Optional[Config] = None) -> dict:
     """Konfigurasi efektif untuk ditampilkan (password proxy disamarkan)."""
     d = asdict(c or get())
-    if d.get("auth_password"):
-        d["auth_password"] = "***"
+    for k in ("auth_password", "secret_key"):
+        if d.get(k):
+            d[k] = "***"
     if d.get("proxy"):
         u = urlsplit(d["proxy"])
         if u.password:

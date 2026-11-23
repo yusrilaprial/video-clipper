@@ -57,6 +57,45 @@ class ParserTest(unittest.TestCase):
         self.assertEqual(S.select_captions(no_orig, "auto")[0], "en-orig")
 
 
+class WhisperAudioTest(unittest.TestCase):
+    def test_wav_loaded_as_float32_array_without_pyav(self):
+        import numpy as np
+        with tempfile.TemporaryDirectory() as t:
+            ok = Path(t) / "ok.wav"
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=f=440:d=2", "-ac", "1",
+                            "-ar", "16000", "-c:a", "pcm_s16le", str(ok)], check=True)
+            a = S._load_wav(ok)
+            self.assertIsInstance(a, np.ndarray)
+            self.assertEqual((a.dtype, len(a)), (np.float32, 32000))
+            self.assertTrue(-1.0 <= a.min() and a.max() <= 1.0 and a.max() > 0.1)  # sine ffmpeg: amplitudo 0.125
+            bad = Path(t) / "bad.wav"  # stereo 44.1 kHz ditolak
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=f=440:d=1", "-ac", "2",
+                            "-ar", "44100", "-c:a", "pcm_s16le", str(bad)], check=True)
+            with self.assertRaises(S.SubtitleError):
+                S._load_wav(bad)
+            junk = Path(t) / "bukan-wav.wav"
+            junk.write_bytes(b"xx")
+            with self.assertRaises(S.SubtitleError):
+                S._load_wav(junk)
+
+    def test_pyav_error_gets_actionable_hint(self):
+        import types
+        from unittest import mock
+
+        class Boom:
+            def transcribe(self, *a, **k):
+                raise TypeError("open() got an unexpected keyword argument 'metadata_errors'")
+
+        with tempfile.TemporaryDirectory() as t:
+            wav = Path(t) / "a.wav"
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=f=440:d=1", "-ac", "1",
+                            "-ar", "16000", "-c:a", "pcm_s16le", str(wav)], check=True)
+            with mock.patch.object(S, "_model", lambda *a, **k: Boom()):
+                with self.assertRaises(S.SubtitleError) as cm:
+                    S.transcribe(wav, "auto")
+        self.assertIn("av>=12,<19", str(cm.exception))
+
+
 class FrameTest(unittest.TestCase):
     def test_resolve(self):
         r = render.resolve_frame

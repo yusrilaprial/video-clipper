@@ -41,6 +41,8 @@ Cek hasil akhirnya dengan `python cli.py --show-config`.
 | `CLIPPER_SUB_SCALE` / `CLIPPER_SUB_FONT` | `1.0` / kosong | Ukuran teks subtitle dan nama font |
 | `CLIPPER_WHISPER_MODEL` / `_DEVICE` / `_COMPUTE` / `_DIR` | `base` / `auto` / `auto` / kosong | Pengaturan Whisper |
 | `CLIPPER_AUTH_USER` / `CLIPPER_AUTH_PASSWORD` | kosong | Login web UI (wajib di server) |
+| `CLIPPER_SECRET_KEY` / `CLIPPER_COOKIE_SECURE` / `CLIPPER_TRUST_PROXY` | kosong / `false` / `false` | Kunci sesi, cookie khusus HTTPS, IP asli di belakang proxy |
+| `CLIPPER_LOGIN_MAX_ATTEMPTS` / `CLIPPER_LOGIN_LOCK_SECONDS` | `5` / `300` | Batas gagal login sebelum IP dikunci sementara |
 | `CLIPPER_MAX_JOBS` / `CLIPPER_MAX_CLIP_SECONDS` / `CLIPPER_RETENTION_HOURS` | `2` / `0` / `0` | Batas render bersamaan, durasi klip, masa simpan hasil |
 | `CLIPPER_ALLOWED_DOMAINS` | kosong | Daftar domain yang boleh diunduh (pisahkan koma) |
 | `CLIPPER_LIVE_WORKERS` | `4` | Unduhan segmen paralel (1-16) |
@@ -74,6 +76,24 @@ Format waktu: `90`, `1:30`, `01:02:03`, `1:30.5`, `1m30s`, `1h2m3s`.
 
 Hasil tersimpan di folder `output/`.
 
+## Antarmuka web
+
+Jalankan server lalu buka http://127.0.0.1:5000 (atau lewat Docker, lihat bagian deploy).
+
+- **Responsif:** satu kolom di ponsel dengan bilah aksi tetap di bawah (tombol "Potong" selalu terjangkau), dua kolom di desktop
+  dengan ringkasan yang menempel di sisi kanan. Target ketuk 44px di layar sentuh, tanpa scroll horizontal dari lebar 320px sampai 1920px.
+- **Tema gelap/terang** mengikuti perangkat, bisa diganti dengan tombol di bar atas (tersimpan).
+- **Link otomatis dibaca:** tempel link (atau tombol clipboard) lalu pratinjau muncul (thumbnail, judul, durasi, lencana LIVE).
+- **Waktu dengan slider** untuk video biasa (tersinkron dengan kolom mulai/akhir), chip panjang cepat (15 dtk ... 5 mnt), dan chip
+  "N menit terakhir" untuk livestream. Format waktu salah ditandai langsung di kolom, tanpa popup.
+- **Frame berupa kartu visual** (TikTok, Reels, Shorts, IG Feed, Persegi, YouTube, X, Sinema, Kustom). Pilihan "isi frame", fokus,
+  bahasa, dan jenis subtitle hanya muncul bila relevan.
+- **Ringkasan** pilihan selalu terlihat; tombol baru aktif setelah link dan waktu valid.
+- **Progres bertahap** (Antre, Unduh, Proses) dengan persen unduhan, catatan (bahasa terdeteksi, peringatan), dan waktu berjalan.
+- **Hasil** langsung bisa diputar di halaman (dengan seek), lalu unduh video dan `.srt`.
+- **Riwayat** 8 klip terakhir di browser ini (putar, unduh, hapus); klip yang sudah dibersihkan server ditandai kedaluwarsa.
+- Pengaturan terakhir (frame, subtitle, kualitas, dll.) diingat. Pintasan: `Ctrl/Cmd + Enter` untuk memulai.
+
 ## Frame untuk TikTok, Instagram, YouTube, dll.
 
 ```bash
@@ -103,6 +123,9 @@ python cli.py URL -s 1:30 -e 2:00 --subs auto --sub-mode srt                   #
   Jika keduanya gagal, klip tetap dibuat tanpa subtitle dan muncul peringatan. `youtube` / `whisper` yang gagal menghentikan proses.
 - Bahasa: `auto` = bahasa asli video (caption YouTube) atau dideteksi Whisper dari ucapan; atau isi kode seperti `id`, `en`, `ja`.
   Bahasa yang terdeteksi ditampilkan setelah proses.
+- Jika muncul error `open() got an unexpected keyword argument 'metadata_errors'`: itu ketidakcocokan PyAV (`av` 19+) dengan
+  faster-whisper. Versi ini sudah menahan `av<19` dan mengirim audio ke Whisper sebagai array (tanpa PyAV). Di Docker, bangun ulang
+  image: `docker compose build --no-cache && docker compose up -d`.
 - Whisper bersifat opsional: `pip install -r requirements-whisper.txt`. Model diunduh sekali saat pertama dipakai
   (butuh internet; `base` sekitar 150 MB). Ganti ukuran model dengan `CLIPPER_WHISPER_MODEL` (`tiny` ... `large-v3`).
 - Jenis: `burn` (tertanam; posisi otomatis menghindari area UI TikTok/Reels), `soft` (track mov_text), `srt` (file terpisah).
@@ -125,6 +148,15 @@ clipper.contoh.com {
 }
 ```
 Catatan penting:
+- **Halaman login:** setelah `CLIPPER_AUTH_USER` / `CLIPPER_AUTH_PASSWORD` diisi, web UI menampilkan halaman login sendiri
+  (bukan dialog bawaan browser): error tampil di dalam form, ada tampilkan/sembunyikan kata sandi, peringatan Caps Lock,
+  "ingat saya 14 hari", tema gelap/terang otomatis, dan tombol **Keluar** di halaman utama. Sesi memakai cookie
+  (HttpOnly, SameSite=Lax) dan form dilindungi token CSRF. Percobaan gagal dibatasi: 5 kali gagal berturut-turut mengunci IP
+  itu 5 menit (`CLIPPER_LOGIN_MAX_ATTEMPTS`, `CLIPPER_LOGIN_LOCK_SECONDS`), dengan hitung mundur di layar.
+  Skrip/curl tetap bisa memakai Basic Auth: `curl -u user:password ...`.
+- **Di belakang reverse proxy HTTPS**, isi di `.env`: `CLIPPER_COOKIE_SECURE=true` dan `CLIPPER_TRUST_PROXY=true`.
+  Tanpa `TRUST_PROXY`, semua pengunjung terlihat berasal dari IP proxy sehingga pembatasan login berlaku untuk semua orang sekaligus.
+  Ganti password = semua sesi lama otomatis tidak berlaku.
 - **Selalu isi login** (`CLIPPER_AUTH_USER` / `CLIPPER_AUTH_PASSWORD`). Tanpa itu siapa pun yang menemukan alamatnya dapat memakai
   CPU dan bandwidth server Anda. Disarankan juga `CLIPPER_ALLOWED_DOMAINS=youtube.com,youtu.be` agar server hanya mengunduh dari domain itu.
 - Atur beban dengan `CLIPPER_MAX_JOBS` (render bersamaan; sisanya antre), `CLIPPER_MAX_CLIP_SECONDS` (bawaan compose 1800),
@@ -169,6 +201,3 @@ Uji offline tanpa internet (butuh ffmpeg): `python tests/test_live_local.py` (mo
 - Jika YouTube meminta login/anti-bot, isi `CLIPPER_COOKIES_FROM_BROWSER=chrome` (atau `CLIPPER_COOKIES_FILE`) di `.env`.
 - Perbarui yt-dlp secara berkala: `pip install -U yt-dlp` (YouTube sering berubah).
 - Gunakan hanya untuk konten yang kamu punya hak/izin memakainya.
-
-## Lisensi
-Proyek ini menggunakan lisensi [MIT](LICENSE).

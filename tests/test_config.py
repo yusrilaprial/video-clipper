@@ -93,6 +93,23 @@ class ConfigTest(unittest.TestCase):
                     config.get.__wrapped__()
                 self.assertIn(f"CLIPPER_{k}", str(cm.exception))
 
+    def test_login_settings(self):
+        with env():
+            c = config.get.__wrapped__()
+        self.assertEqual((c.secret_key, c.cookie_secure, c.trust_proxy, c.login_max_attempts, c.login_lock_seconds),
+                         (None, False, False, 5, 300))
+        with env(COOKIE_SECURE="true", TRUST_PROXY="yes", LOGIN_MAX_ATTEMPTS=3, LOGIN_LOCK_SECONDS=60, SECRET_KEY="abc"):
+            c = config.get.__wrapped__()
+        self.assertEqual((c.secret_key, c.cookie_secure, c.trust_proxy, c.login_max_attempts, c.login_lock_seconds),
+                         ("abc", True, True, 3, 60))
+        for k, v in [("COOKIE_SECURE", "mungkin"), ("LOGIN_MAX_ATTEMPTS", "0"), ("LOGIN_LOCK_SECONDS", "1")]:
+            with self.subTest(k=k), env(**{k: v}):
+                with self.assertRaises(config.ConfigError):
+                    config.get.__wrapped__()
+        with env(AUTH_USER="a", AUTH_PASSWORD="b", SECRET_KEY="kunci"):
+            d = config.describe(config.get.__wrapped__())
+        self.assertEqual((d["auth_password"], d["secret_key"]), ("***", "***"))
+
     def test_describe_masks_auth_password(self):
         with env(AUTH_USER="a", AUTH_PASSWORD="rahasia"):
             d = config.describe(config.get.__wrapped__())

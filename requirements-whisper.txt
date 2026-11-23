@@ -1,2 +1,5 @@
 # Opsional: transkripsi + deteksi bahasa otomatis (--subs whisper / auto). Model diunduh saat pertama dipakai.
 faster-whisper>=1.0
+# PyAV 19+ menghapus argumen av.open(metadata_errors=...) yang masih dipanggil faster-whisper 1.2.x,
+# padahal faster-whisper hanya mensyaratkan av>=11 (pip otomatis memasang yang terbaru -> error). Tahan di <19.
+av>=12,<19
