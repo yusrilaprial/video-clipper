@@ -135,7 +135,16 @@ def main() -> int:
                              progress=progress, mode=a.mode, test=a.test, look=look)
             print(f"  Tersimpan: {path}")
     except Exception as ex:  # noqa: BLE001
-        print(f"\nGagal: {ex}", file=sys.stderr)
+        import cookies as ck
+        import yterrors
+        d = yterrors.explain(str(ex), ck.active_source() is not None)
+        print(f"\nGagal: {d['message']}", file=sys.stderr)
+        if d["hint"]:
+            print(f"Saran: {d['hint']}", file=sys.stderr)
+        if d["code"] in ("bot_check", "age", "members", "private"):
+            print("       Di CLI: isi CLIPPER_COOKIES_FILE (cookies.txt) atau CLIPPER_COOKIES_FROM_BROWSER di .env.", file=sys.stderr)
+        if d["code"] != "other":
+            print(f"Detail: {d['detail'][:300]}", file=sys.stderr)
         return 1
     return 0
 

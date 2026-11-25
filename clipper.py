@@ -1,8 +1,11 @@
 """Core logic: potong video dari URL (YouTube & platform lain yang didukung yt-dlp)."""
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -111,24 +114,57 @@ def resolve_look(look: Optional[dict] = None) -> dict:
 
 
 def ydl_base_opts() -> dict:
-    """Opsi yt-dlp bersama (proxy, cookies, lokasi ffmpeg) dari konfigurasi/.env."""
+    """Opsi yt-dlp bersama (proxy, cookies, lokasi ffmpeg, player client) dari konfigurasi/.env.
+
+    Prioritas cookies: file yang diunggah lewat web > CLIPPER_COOKIES_FILE > CLIPPER_COOKIES_FROM_BROWSER.
+    """
+    import cookies as ck
     c = config.get()
     o: dict = {"quiet": True, "no_warnings": True, "noplaylist": True}
     if c.proxy:
         o["proxy"] = c.proxy
-    if c.cookies_file:
+    if ck.managed_path().is_file():
+        o["cookiefile"] = str(ck.managed_path())
+    elif c.cookies_file:
         o["cookiefile"] = c.cookies_file
     elif c.cookies_from_browser:
         o["cookiesfrombrowser"] = tuple(c.cookies_from_browser.split(":"))
     if c.ffmpeg_location:
         o["ffmpeg_location"] = c.ffmpeg_location
+    if c.yt_player_clients:
+        o["extractor_args"] = {"youtube": {"player_client": list(c.yt_player_clients)}}
     return o
+
+
+@contextmanager
+def ydl_session(extra: Optional[dict] = None):
+    """Opsi yt-dlp siap pakai dengan SALINAN cookies sekali pakai.
+
+    yt-dlp menulis ulang file cookies setiap selesai dipakai; dengan salinan, job bersamaan tidak saling menimpa
+    dan file asli (mis. mount read-only, atau hasil unggahan) tidak diubah.
+    """
+    opts = {**ydl_base_opts(), **(extra or {})}
+    tmp = None
+    src = opts.get("cookiefile")
+    try:
+        if src and Path(src).is_file():
+            fd, tmp = tempfile.mkstemp(prefix="ck_", suffix=".txt")
+            os.close(fd)
+            shutil.copyfile(src, tmp)
+            os.chmod(tmp, 0o600)
+            opts["cookiefile"] = tmp
+        yield opts
+    finally:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 
 def get_info(url: str) -> dict:
     """Ambil metadata video (judul, durasi, thumbnail) tanpa mengunduh."""
-    opts = {**ydl_base_opts(), "skip_download": True}
-    with yt_dlp.YoutubeDL(opts) as ydl:
+    with ydl_session({"skip_download": True}) as opts, yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
     return {
         "title": info.get("title"),
@@ -203,7 +239,6 @@ def clip(
             progress(d)
 
     opts: dict = {
-        **ydl_base_opts(),
         "format": _format_selector(quality),
         "outtmpl": str(dl_dir / f"{stem}.%(ext)s"),
         "download_ranges": download_range_func(None, [(t0, t1)]),
@@ -221,7 +256,7 @@ def clip(
         opts["merge_output_format"] = "mp4"
 
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
+        with ydl_session(opts) as sopts, yt_dlp.YoutubeDL(sopts) as ydl:
             info = ydl.extract_info(url, download=True)
             final = ydl.prepare_filename(info)
 

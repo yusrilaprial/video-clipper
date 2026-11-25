@@ -163,6 +163,8 @@ class Config:
     proxy: Optional[str]
     cookies_file: Optional[str]
     cookies_from_browser: Optional[str]
+    cookies_upload: str
+    yt_player_clients: tuple
     # mode live
     live_workers: int
     live_margin: int
@@ -199,6 +201,14 @@ def _resolve_ffmpeg(raw: Optional[str], probe_raw: Optional[str]) -> tuple[str, 
     sibling = p.with_name(p.name.replace("ffmpeg", "ffprobe"))
     probe = probe_raw or (str(sibling) if sibling.exists() and sibling != p else "ffprobe")
     return str(p), probe, str(p)
+
+
+def _clients(raw: Optional[str]) -> tuple:
+    out = tuple(c.strip().lower() for c in (raw or "").split(",") if c.strip())
+    for c in out:
+        if not re.fullmatch(r"[a-z0-9_]+", c):
+            raise ConfigError(f"{PREFIX}YT_PLAYER_CLIENTS memuat nama client tidak valid: {c!r} (contoh: tv,web_safari,mweb)")
+    return out
 
 
 def load() -> Config:
@@ -238,6 +248,8 @@ def load() -> Config:
         proxy=e.str("PROXY"),
         cookies_file=cookies_file,
         cookies_from_browser=e.str("COOKIES_FROM_BROWSER"),
+        cookies_upload=str(Path(e.str("COOKIES_UPLOAD_PATH") or (Path(e.str("OUTPUT_DIR", "output")).expanduser().resolve().parent / "cookies.txt")).expanduser()),
+        yt_player_clients=_clients(e.str("YT_PLAYER_CLIENTS", "")),
         live_workers=e.int("LIVE_WORKERS", 4, 1, 16),
         live_margin=e.int("LIVE_MARGIN", 1, 0, 5),
         live_retries=e.int("LIVE_RETRIES", 4, 1, 10),

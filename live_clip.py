@@ -26,7 +26,7 @@ from yt_dlp.utils import sanitize_filename, update_url_query
 import config
 import render
 import subtitles
-from clipper import QUALITIES, format_time, resolve_look, resolve_range, ydl_base_opts
+from clipper import QUALITIES, format_time, resolve_look, resolve_range, ydl_session
 
 
 class LiveClipError(Exception):
@@ -223,9 +223,9 @@ def _pick(fmts: list[dict], quality: str):
 
 
 def extract_live(url: str) -> tuple[dict, list[dict]]:
-    opts = {**ydl_base_opts(), "skip_download": True, "live_from_start": True}
+    extra = {"skip_download": True, "live_from_start": True}
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
+        with ydl_session(extra) as opts, yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
     except Exception as e:  # noqa: BLE001
         raise LiveClipError(f"Gagal membaca info live: {e}") from e

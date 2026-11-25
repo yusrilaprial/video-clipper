@@ -240,6 +240,24 @@
   .toast.show { opacity:1; transform:translate(-50%,0); } .toast.err { border-color:rgba(255,107,107,.5); color:var(--err); }
   @media (min-width:980px) { .toast { bottom:28px; } }
 
+  /* ---------- cookies & error terjemahan ---------- */
+  #cookieBtn { position:relative; } .cstat { width:9px; height:9px; border-radius:50%; background:var(--field-b); flex:none; }
+  #cookieBtn.on .cstat { background:var(--ok); box-shadow:0 0 0 3px rgba(62,207,142,.2); } #cookieBtn.warn .cstat { background:var(--warn); }
+  .errbox { display:grid; gap:8px; justify-items:start; } .errbox .hint2 { color:var(--fg); opacity:.9; }
+  .msg .errbox { margin-top:2px; } details.tech { font-size:.8rem; color:var(--mut); max-width:100%; } details.tech summary { cursor:pointer; }
+  details.tech code { display:block; margin-top:6px; padding:8px 10px; border-radius:9px; background:var(--field); color:var(--mut); white-space:pre-wrap; overflow-wrap:anywhere; font-size:.76rem; }
+  dialog { width:calc(100% - 32px); max-width:520px; max-height:calc(100dvh - 32px); overflow:auto; padding:0; border:1px solid var(--border); border-radius:20px; color:var(--fg); background:var(--card); box-shadow:0 30px 80px rgba(0,0,0,.5); }
+  dialog::backdrop { background:rgba(5,8,15,.62); backdrop-filter:blur(3px); }
+  dialog[open] { animation:rise .25s ease; } @keyframes rise { from { opacity:0; transform:translateY(14px) scale(.985); } to { opacity:1; transform:none; } }
+  .dlg { padding:22px; display:grid; gap:14px; } .dlg h2 { margin:0; display:flex; align-items:center; gap:10px; } .dlg .x { margin-left:auto; }
+  .cstatus { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border-radius:12px; background:var(--card2); border:1px solid var(--border); font-size:.9rem; }
+  .cstatus.on { background:var(--ok-bg); border-color:rgba(62,207,142,.35); } .cstatus.warn { background:var(--warn-bg); border-color:rgba(224,160,48,.35); }
+  .cstatus small { display:block; color:var(--mut); margin-top:2px; } .cstatus b { display:block; }
+  .how { font-size:.88rem; color:var(--mut); } .how summary { cursor:pointer; font-weight:600; color:var(--fg); } .how ol { margin:10px 0 0; padding-left:20px; display:grid; gap:6px; }
+  .filepick { position:relative; display:flex; align-items:center; gap:10px; min-height:52px; padding:0 14px; border-radius:12px; border:1.5px dashed var(--field-b); background:var(--field); color:var(--mut); cursor:pointer; transition:border-color .15s; }
+  .filepick:hover, .filepick:focus-within { border-color:var(--acc); } .filepick input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }
+  .filepick.has { color:var(--fg); border-style:solid; } .filepick span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .btn.danger { color:var(--err); border-color:rgba(255,107,107,.4); }
   /* target ketuk lebih besar di layar sentuh / ponsel (pedoman 44px) */
   @media (pointer:coarse), (max-width:640px) {
     .chip { height:44px; padding:0 16px; } .hitem .iconbtn { height:44px; min-width:44px; } .iconbtn.tiny { height:40px; padding:0 14px; }
@@ -249,6 +267,7 @@
   @keyframes shimmer { to { background-position:-200% 0; } } @keyframes pulse { 50% { opacity:.3; } }
   @keyframes slide { 0% { margin-left:-35%; } 100% { margin-left:100%; } }
   @media (prefers-reduced-motion: reduce) { * { animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; } }
+  @media (max-width:640px) { dialog { width:100%; max-width:none; margin:auto 0 0; border-radius:20px 20px 0 0; max-height:92dvh; } }
   @media (max-width:360px) { .layout { padding:12px; } .card { padding:14px; } .row2 { gap:8px; } .seg span { font-size:.8rem; } }
 </style>
 </head>
@@ -270,6 +289,8 @@
   <symbol id="i-caption" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
   <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4"/></symbol>
 </svg>
 
@@ -277,6 +298,9 @@
   <div class="brand"><span class="logo"><svg class="ic"><use href="#i-scissors"/></svg></span>Video Clipper</div>
   <button type="button" class="iconbtn" id="themeBtn" aria-label="Ganti tema terang/gelap" title="Ganti tema">
     <svg class="ic sun"><use href="#i-sun"/></svg><svg class="ic moon"><use href="#i-moon"/></svg>
+  </button>
+  <button type="button" class="linkbtn" id="cookieBtn" aria-haspopup="dialog" title="Cookies YouTube">
+    <svg class="ic"><use href="#i-key"/></svg><span>Cookies</span><i class="cstat" id="cstat"></i>
   </button>
   {% if auth_enabled %}
   <form method="post" action="/logout">
@@ -450,6 +474,31 @@
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<dialog id="cookieDlg" aria-labelledby="cdTitle">
+  <div class="dlg">
+    <h2 id="cdTitle"><svg class="ic"><use href="#i-key"/></svg>Cookies YouTube
+      <button type="button" class="iconbtn x" id="cClose" aria-label="Tutup"><svg class="ic"><use href="#i-x"/></svg></button></h2>
+    <div class="cstatus" id="cStatus"></div>
+    <p class="help" style="margin:0">YouTube sering meminta verifikasi anti-bot ("Sign in to confirm you're not a bot") pada IP server. Cookies dari sesi YouTube yang sudah login membantu melewatinya. Cookies hanya disimpan di server ini dan tidak pernah dikirim balik ke browser.</p>
+    <details class="how"><summary>Cara mengekspor cookies</summary>
+      <ol>
+        <li>Buka <b>jendela privat/incognito</b> baru, lalu login ke YouTube.</li>
+        <li>Di tab yang sama, buka <code>youtube.com/robots.txt</code>.</li>
+        <li>Ekspor cookies <b>youtube.com</b> dengan ekstensi seperti "Get cookies.txt LOCALLY" (format Netscape).</li>
+        <li><b>Tutup jendela privat</b> agar YouTube tidak memutar ulang cookies tersebut.</li>
+        <li>Pilih file hasil ekspor di bawah, lalu unggah.</li>
+      </ol></details>
+    <div class="banner warn" style="margin:0"><svg class="ic"><use href="#i-alert"/></svg><span>Pakai akun khusus, bukan akun utama Anda. YouTube bisa membatasi akun yang dipakai untuk unduhan otomatis.</span></div>
+    <div id="cManage" class="dlg" style="padding:0">
+      <label class="filepick" id="cPick"><svg class="ic"><use href="#i-upload"/></svg><span id="cFileName">Pilih file cookies.txt</span><input type="file" id="cFile" accept=".txt,text/plain"></label>
+      <div class="msg" id="cMsg" aria-live="polite"></div>
+      <div class="btnrow" id="cBtns"><button type="button" class="btn" id="cUpload" disabled><span class="spin" aria-hidden="true"></span><span class="lbl3">Unggah cookies</span></button>
+        <button type="button" class="btn sec danger" id="cDelete" hidden><svg class="ic"><use href="#i-trash"/></svg>Hapus cookies</button></div>
+    </div>
+    <div class="banner info" id="cNoManage" hidden><svg class="ic"><use href="#i-info"/></svg><span>Unggah lewat web dimatikan karena server terbuka tanpa login. Isi <code>CLIPPER_AUTH_USER</code> dan <code>CLIPPER_AUTH_PASSWORD</code>, atau letakkan file cookies di server (<code>CLIPPER_COOKIES_FILE</code>).</span></div>
+  </div>
+</dialog>
+
 <script>
 (function () {
   'use strict';
@@ -484,6 +533,16 @@
   }
   var post = function (u, b, signal) { return api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b), signal: signal }); };
   var expiredHtml = 'Sesi berakhir. <a href="/login">Masuk lagi</a>';
+  var COOKIE_CODES = ['bot_check', 'age', 'members', 'private'];
+  var BLOCKING = ['bot_check', 'age', 'members', 'private', 'geo', 'unavailable', 'upcoming', 'rate_limit'];
+  /* error terjemahan: penyebab + saran + tombol kelola cookies + detail teknis */
+  function errBlock(d) {
+    var h = '<div class="errbox"><div>' + esc(d.error || d.message || 'Terjadi kesalahan') + '</div>';
+    if (d.hint) h += '<div class="hint2">' + esc(d.hint) + '</div>';
+    if (COOKIE_CODES.indexOf(d.code) >= 0 && d.can_manage_cookies) h += '<button type="button" class="chip" data-open-cookies>' + icon('key') + 'Kelola cookies</button>';
+    if (d.detail && d.code && d.code !== 'other') h += '<details class="tech"><summary>Detail teknis</summary><code>' + esc(d.detail) + '</code></details>';
+    return h + '</div>';
+  }
 
   /* ------------------------------------------------ waktu (cermin aturan server) */
   function isRel(v) { v = (v || '').trim().toLowerCase(); return v[0] === '-' || v === 'now' || v === 'live' || v === 'sekarang'; }
@@ -572,7 +631,12 @@
     $('preview').hidden = true; $('skeleton').hidden = false; setUrlMsg('Membaca info video...', '');
     post('/api/info', { url: u }, infoCtl.signal).then(function (r) {
       $('skeleton').hidden = true;
-      if (!r.ok) { S.url = ''; setUrlMsg((r.data.error || 'Info video tidak bisa dibaca') + ' Anda tetap bisa mencoba memotong.', 'warn'); refresh(); return; }
+      if (!r.ok) {
+        S.url = ''; var d0 = r.data || {}, blocking = BLOCKING.indexOf(d0.code) >= 0;
+        var m0 = $('urlMsg'); m0.className = 'msg ' + (blocking ? 'err' : 'warn');
+        m0.innerHTML = errBlock(d0.error ? d0 : { error: 'Info video tidak bisa dibaca', code: 'other' }) + (blocking ? '' : '<div>Anda tetap bisa mencoba memotong.</div>');
+        $('url').classList.toggle('bad', blocking); refresh(); return;
+      }
       var d = r.data; S.url = u; S.info = d; S.live = d.live_status === 'is_live' || d.live_status === 'post_live';
       S.duration = !S.live && d.duration ? d.duration : null;
       $('ptitle').textContent = d.title || 'Tanpa judul'; $('puploader').textContent = d.uploader || '';
@@ -676,6 +740,7 @@
 
   /* ------------------------------------------------ jalankan & pantau */
   function showRunErr(html, raw) { $('runErrText').innerHTML = raw ? html : esc(html); $('runErr').hidden = !html; }
+  function showRunErrObj(d) { $('runErrText').innerHTML = errBlock(d); $('runErr').hidden = false; }
   function setBusy(b) {
     S.busy = b;
     qa('[data-run]').forEach(function (btn) { btn.classList.toggle('loading', b); btn.querySelector('.lbl2').textContent = b ? 'Memproses...' : (btn.id === 'btnRun2' ? 'Potong' : 'Potong & Render'); });
@@ -692,7 +757,7 @@
     validateRange(); if (!S.range) { toast('Periksa waktu mulai dan akhir', true); $('start').focus(); return; }
     showRunErr('', true); $('cardRes').hidden = true; setBusy(true);
     post('/api/clip', payload()).then(function (r) {
-      if (!r.ok) { setBusy(false); return showRunErr(r.data.error || 'Permintaan ditolak'); }
+      if (!r.ok) { setBusy(false); return showRunErrObj(r.data.error ? r.data : { error: 'Permintaan ditolak' }); }
       S.job = r.data.job_id; S.t0 = Date.now(); showProgress({ status: 'queued', stage: 'queued', percent: null, progress: 'Menunggu antrean...', notes: [] });
       $('cardProg').scrollIntoView({ behavior: 'smooth', block: 'center' });
       clearInterval(S.timer); S.timer = setInterval(poll, 1000); poll();
@@ -706,7 +771,7 @@
       if (!r.ok) { clearInterval(S.timer); setBusy(false); $('cardProg').hidden = true; return showRunErr('Job tidak ditemukan. Server mungkin dimulai ulang.'); }
       var j = r.data; $('elapsed').textContent = fmt((Date.now() - S.t0) / 1000);
       if (j.status === 'done') { clearInterval(S.timer); showProgress(j, true); setBusy(false); addHistory(id, j); showResult(id, j); }
-      else if (j.status === 'error') { clearInterval(S.timer); setBusy(false); $('cardProg').hidden = true; showRunErr(j.error || 'Proses gagal'); renderNotes('notes', j.notes); }
+      else if (j.status === 'error') { clearInterval(S.timer); setBusy(false); $('cardProg').hidden = true; showRunErrObj({ error: j.error || 'Proses gagal', code: j.error_code, hint: j.hint, detail: j.detail, can_manage_cookies: j.can_manage_cookies }); }
       else showProgress(j);
     }).catch(function (e) { if (e.expired) { clearInterval(S.timer); setBusy(false); showRunErr(expiredHtml, true); } });
   }
@@ -801,8 +866,63 @@
     var m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = next === 'dark' ? '#0b0d12' : '#eef2fb';
   });
 
+  /* ------------------------------------------------ cookies */
+  var dlg = $('cookieDlg'), ck = { configured: false };
+  function fmtDate(ts) { try { return new Date(ts * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return ''; } }
+  var SRC = { upload: 'diunggah lewat web', file: 'dari file di server (CLIPPER_COOKIES_FILE)', browser: 'dari browser di server (CLIPPER_COOKIES_FROM_BROWSER)' };
+  function renderCookies(st) {
+    ck = st || ck;
+    var warn = (ck.warnings && ck.warnings.length) ? ck.warnings : [];
+    var btn = $('cookieBtn'); btn.classList.toggle('on', !!ck.configured && !warn.length); btn.classList.toggle('warn', !!ck.configured && warn.length > 0);
+    btn.title = ck.configured ? 'Cookies aktif' : 'Cookies YouTube (belum ada)';
+    var box = $('cStatus');
+    if (!ck.configured) { box.className = 'cstatus'; box.innerHTML = icon('info') + '<div><b>Belum ada cookies</b><small>Video tertentu dan IP server yang dicurigai bot memerlukannya.</small></div>'; }
+    else {
+      var bits = [SRC[ck.source] || ''];
+      if (ck.uploaded && ck.updated) bits[0] = 'diunggah ' + ago(ck.updated * 1000);
+      if (ck.youtube) bits.push(ck.youtube + ' cookie YouTube');
+      if (ck.uploaded) bits.push(ck.login ? 'login terdeteksi' : 'tanpa cookie login');
+      if (ck.expires) bits.push('login berlaku sampai ' + fmtDate(ck.expires));
+      box.className = 'cstatus ' + (warn.length ? 'warn' : 'on');
+      box.innerHTML = icon(warn.length ? 'alert' : 'check') + '<div><b>Cookies aktif</b><small>' + esc(bits.filter(Boolean).join(' · ')) + '</small>' + warn.map(function (w) { return '<small style="color:var(--warn)">' + esc(w) + '</small>'; }).join('') + '</div>';
+    }
+    $('cManage').hidden = ck.can_manage === false; $('cNoManage').hidden = ck.can_manage !== false;
+    $('cDelete').hidden = !ck.uploaded;
+  }
+  function loadCookies() { return api('/api/cookies').then(function (r) { renderCookies(r.data); }).catch(function () {}); }
+  function cMsg(t, cls) { var m = $('cMsg'); m.textContent = t; m.className = 'msg' + (cls ? ' ' + cls : ''); }
+  function openCookies() { cMsg('', ''); loadCookies(); if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); }
+  $('cookieBtn').addEventListener('click', openCookies);
+  $('cClose').addEventListener('click', function () { dlg.close ? dlg.close() : dlg.removeAttribute('open'); });
+  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+  document.addEventListener('click', function (e) { if (e.target.closest('[data-open-cookies]')) openCookies(); });
+  $('cFile').addEventListener('change', function () {
+    var f = this.files[0]; $('cFileName').textContent = f ? f.name : 'Pilih file cookies.txt'; $('cPick').classList.toggle('has', !!f);
+    $('cUpload').disabled = !f; cMsg(f && f.size > 1048576 ? 'File terlalu besar (maksimal 1 MB).' : '', 'err'); if (f && f.size > 1048576) $('cUpload').disabled = true;
+  });
+  function cBusy(b) { $('cUpload').classList.toggle('loading', b); $('cUpload').disabled = b || !$('cFile').files[0]; $('cDelete').disabled = b; }
+  $('cUpload').addEventListener('click', function () {
+    var f = $('cFile').files[0]; if (!f) return; var fd = new FormData(); fd.append('file', f); cBusy(true); cMsg('Mengunggah...', '');
+    fetch('/api/cookies', { method: 'POST', headers: { 'X-Clipper': '1' }, body: fd }).then(function (r) {
+      if (r.status === 401) throw Object.assign(new Error('expired'), { expired: true });
+      return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+    }).then(function (r) {
+      cBusy(false);
+      if (!r.ok) return cMsg(r.d.error || 'Gagal mengunggah', 'err');
+      $('cFile').value = ''; $('cFileName').textContent = 'Pilih file cookies.txt'; $('cPick').classList.remove('has'); $('cUpload').disabled = true;
+      renderCookies(r.d); cMsg('Cookies tersimpan. Mencoba membaca ulang video...', 'ok'); toast('Cookies tersimpan');
+      S.url = ''; if (validUrl($('url').value)) urlChanged(true);
+    }).catch(function (e) { cBusy(false); cMsg(e.expired ? 'Sesi berakhir. Muat ulang halaman dan masuk lagi.' : 'Gagal menghubungi server.', 'err'); });
+  });
+  $('cDelete').addEventListener('click', function () {
+    cBusy(true);
+    fetch('/api/cookies', { method: 'DELETE', headers: { 'X-Clipper': '1' } }).then(function (r) { return r.json(); }).then(function (d) {
+      cBusy(false); renderCookies(d); cMsg(d.error || 'Cookies dihapus.', d.error ? 'err' : 'ok'); if (!d.error) toast('Cookies dihapus');
+    }).catch(function () { cBusy(false); cMsg('Gagal menghubungi server.', 'err'); });
+  });
+
   /* ------------------------------------------------ mulai */
-  loadPrefs(); renderHistory(false); validateRange(); urlChanged(true); refresh(true);
+  loadPrefs(); renderHistory(false); loadCookies(); validateRange(); urlChanged(true); refresh(true);
 })();
 </script>
 </body>

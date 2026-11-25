@@ -15,7 +15,9 @@ from flask import Flask, jsonify, redirect, render_template, request, send_file,
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import config
+import cookies as ck
 import render
+import yterrors
 from clipper import QUALITIES, clip_auto, get_info, resolve_look, resolve_range
 
 CFG = config.get()  # dibaca dari .env / environment variable CLIPPER_*
@@ -23,6 +25,7 @@ OUTPUT = Path(CFG.output_dir)
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024  # batas unggahan (cookies.txt maks. 1 MB)
 AUTH_ON = bool(CFG.auth_user)
 # Kunci sesi: dari CLIPPER_SECRET_KEY, atau diturunkan dari kredensial (stabil saat restart; ganti password = semua sesi keluar)
 _FINGERPRINT = hashlib.sha256(f"clipper-auth:{CFG.auth_user}:{CFG.auth_password}".encode()).hexdigest()[:20]
@@ -218,12 +221,65 @@ def index():
         max_clip=CFG.max_clip_seconds)
 
 
+def _can_manage_cookies() -> bool:
+    """Cookies adalah rahasia: hanya bisa diunggah bila ada login, atau server hanya terbuka di localhost."""
+    return AUTH_ON or CFG.host in ("127.0.0.1", "localhost", "::1")
+
+
+def _err_payload(e: Exception) -> dict:
+    d = yterrors.explain(str(e), ck.active_source() is not None)
+    d["error"] = d["message"]
+    d["can_manage_cookies"] = _can_manage_cookies()
+    return d
+
+
+@app.errorhandler(413)
+def _too_large(_e):
+    return jsonify(error="File terlalu besar (maksimal 1 MB)."), 413
+
+
 @app.post("/api/info")
 def api_info():
     try:
         return jsonify(get_info(_check_url((request.json or {}).get("url"))))
     except Exception as e:  # noqa: BLE001
+        return jsonify(_err_payload(e)), 400
+
+
+@app.get("/api/cookies")
+def cookies_status():
+    return jsonify(ck.status(_can_manage_cookies()))
+
+
+def _cookie_guard():
+    if not _can_manage_cookies():
+        return jsonify(error="Aktifkan login (CLIPPER_AUTH_USER dan CLIPPER_AUTH_PASSWORD) agar cookies bisa dikelola "
+                             "lewat web, atau letakkan file cookies di server."), 403
+    if request.headers.get("X-Clipper") != "1":  # header kustom: tidak bisa dikirim form lintas-situs
+        return jsonify(error="Permintaan tidak valid."), 400
+    return None
+
+
+@app.post("/api/cookies")
+def cookies_upload():
+    if (g := _cookie_guard()) is not None:
+        return g
+    f = request.files.get("file")
+    if not f:
+        return jsonify(error="Pilih file cookies.txt terlebih dahulu."), 400
+    try:
+        ck.save(f.read(ck.MAX_BYTES + 1))
+    except ck.CookieError as e:
         return jsonify(error=str(e)), 400
+    return jsonify(ck.status(True))
+
+
+@app.delete("/api/cookies")
+def cookies_delete():
+    if (g := _cookie_guard()) is not None:
+        return g
+    ck.delete()
+    return jsonify(ck.status(True))
 
 
 def _percent(d: dict):
@@ -264,7 +320,9 @@ def _run(job_id: str, p: dict) -> None:
                        size=path.stat().st_size, kind="audio" if path.suffix.lower() == ".mp3" else "video",
                        srt=str(srt) if srt.exists() else None, finished=time.time())
         except Exception as e:  # noqa: BLE001
-            job.update(status="error", error=str(e), finished=time.time())
+            d = _err_payload(e)
+            job.update(status="error", error=d["message"], error_code=d["code"], hint=d["hint"], detail=d["detail"],
+                       can_manage_cookies=d["can_manage_cookies"], finished=time.time())
 
 
 @app.post("/api/clip")
@@ -300,7 +358,8 @@ def api_job(job_id):
     if not job:
         return jsonify(error="Job tidak ditemukan"), 404
     public = {k: v for k, v in job.items()
-              if k in ("status", "stage", "percent", "progress", "notes", "name", "error", "size", "kind", "downloaded_mb")}
+              if k in ("status", "stage", "percent", "progress", "notes", "name", "error", "size", "kind", "downloaded_mb",
+                       "error_code", "hint", "detail", "can_manage_cookies")}
     public["has_srt"] = bool(job.get("srt"))
     return jsonify(public)
 

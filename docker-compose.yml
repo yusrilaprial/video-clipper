@@ -27,7 +27,7 @@ services:
       CLIPPER_MAX_JOBS: "${CLIPPER_MAX_JOBS:-2}"
       CLIPPER_MAX_CLIP_SECONDS: "${CLIPPER_MAX_CLIP_SECONDS:-1800}"
     volumes:
-      - clipper-data:/data          # hasil klip + model Whisper (tidak diunduh ulang)
+      - clipper-data:/data          # hasil klip, model Whisper, dan cookies YouTube yang diunggah (/data/cookies.txt)
       # Alternatif folder biasa (izin: sudo chown -R 10001:10001 ./data):
       # - ./data:/data
     security_opt:

@@ -34,6 +34,7 @@ Cek hasil akhirnya dengan `python cli.py --show-config`.
 | `CLIPPER_TEST_SECONDS` | `10` | Lama klip pada `--test` |
 | `CLIPPER_TITLE_MAX` | `80` | Panjang maksimal judul di nama file |
 | `CLIPPER_FFMPEG_PATH` / `CLIPPER_FFPROBE_PATH` | dari PATH | Folder atau path ffmpeg jika tidak ada di PATH |
+| `CLIPPER_COOKIES_UPLOAD_PATH` / `CLIPPER_YT_PLAYER_CLIENTS` | di samping output / kosong | Lokasi cookies hasil unggahan web; client pemutar YouTube (lanjutan) |
 | `CLIPPER_PROXY` | kosong | Proxy untuk yt-dlp dan unduhan segmen live |
 | `CLIPPER_COOKIES_FILE` / `CLIPPER_COOKIES_FROM_BROWSER` | kosong | Cookies untuk video yang meminta login (`chrome`, `firefox:PROFIL`, dst.) |
 | `CLIPPER_FRAME` / `CLIPPER_FIT` / `CLIPPER_FOCUS` | `original` / `blur` / `0.5` | Frame hasil, cara mengisi frame, posisi potongan |
@@ -93,6 +94,28 @@ Jalankan server lalu buka http://127.0.0.1:5000 (atau lewat Docker, lihat bagian
 - **Hasil** langsung bisa diputar di halaman (dengan seek), lalu unduh video dan `.srt`.
 - **Riwayat** 8 klip terakhir di browser ini (putar, unduh, hapus); klip yang sudah dibersihkan server ditandai kedaluwarsa.
 - Pengaturan terakhir (frame, subtitle, kualitas, dll.) diingat. Pintasan: `Ctrl/Cmd + Enter` untuk memulai.
+
+## Error "Sign in to confirm you're not a bot"
+
+Pesan ini berasal dari **YouTube**, bukan bug aplikasi dan bukan karena link salah. YouTube makin sering menganggap permintaan dari
+IP server/datacenter (VPS, cloud, Docker di hosting) sebagai bot, sedangkan dari komputer rumahan biasanya lolos. Saat link dimasukkan,
+aplikasi menampilkan penjelasan dan langkah perbaikan; pesan asli ada di "Detail teknis".
+
+Perbaikan, dari yang paling andal:
+1. **Unggah cookies** dari sesi YouTube yang sudah login: klik tombol **Cookies** di pojok kanan atas web UI, ikuti petunjuk di dialog,
+   lalu unggah `cookies.txt`. Video langsung dibaca ulang. (Butuh login web aktif, atau server hanya terbuka di localhost.)
+   - Ekspor dari **jendela privat**: login ke YouTube, buka `youtube.com/robots.txt` di tab yang sama, ekspor cookies `youtube.com`
+     (format Netscape, mis. ekstensi "Get cookies.txt LOCALLY"), lalu **tutup jendela privat**. Ini mencegah YouTube memutar ulang cookies tersebut.
+   - **Pakai akun khusus**, bukan akun utama: YouTube dapat membatasi akun yang dipakai untuk unduhan otomatis.
+   - Cookies kedaluwarsa atau ditolak? Ekspor ulang dengan cara yang sama, lalu unggah lagi.
+   - Tanpa web UI: letakkan file di server dan isi `CLIPPER_COOKIES_FILE`, atau di Docker: `docker cp cookies.txt video-clipper:/data/cookies.txt`.
+2. **Proxy** dengan IP yang lebih "bersih" (mis. residensial): `CLIPPER_PROXY=http://user:pass@host:port`.
+3. Lanjutan: `CLIPPER_YT_PLAYER_CLIENTS=tv,web_safari` memaksa client pemutar tertentu. Tidak ada jaminan karena YouTube sering berubah.
+   Selalu perbarui yt-dlp: `pip install -U yt-dlp` (Docker: `docker compose build --no-cache`).
+
+Keamanan cookies: file disimpan dengan izin 0600, isinya tidak pernah dikirim balik ke browser, dan setiap unduhan memakai salinan
+sementara (yt-dlp menulis ulang file cookies saat selesai, sehingga salinan mencegah job bersamaan saling menimpa).
+Pesan lain (video privat, dibatasi usia, khusus member, diblokir negara, stream belum mulai, dll.) juga dijelaskan dengan saran yang sesuai.
 
 ## Frame untuk TikTok, Instagram, YouTube, dll.
 
@@ -194,7 +217,7 @@ Syarat & batasan:
 - Mode live selalu merender ulang (libx264 + AAC), jadi lebih lambat dari mode `--fast` pada video biasa.
 - Estimasi data: sebesar klip + sekitar 3 segmen tambahan (2 margin + sq=0).
 
-Uji offline tanpa internet (butuh ffmpeg): `python tests/test_live_local.py` (mode live), `python tests/test_subs_frames.py` (subtitle, frame, render), `python tests/test_web.py` (web app) dan `python tests/test_config.py` (konfigurasi).
+Uji offline tanpa internet (butuh ffmpeg): `python tests/test_live_local.py` (mode live), `python tests/test_subs_frames.py` (subtitle, frame, render), `python tests/test_web.py` (web app), `python tests/test_cookies.py` (cookies dan penerjemah error) dan `python tests/test_config.py` (konfigurasi).
 
 ## Catatan
 - Mode presisi (default) memotong tepat di detik yang diminta; `--fast` jauh lebih cepat tapi bisa meleset beberapa detik.
